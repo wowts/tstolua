@@ -1,0 +1,20 @@
+{
+  "name": "tstolua",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "prepublish": "tsc -p .",
+    "prepublish:watch": "tsc -w -p .",
+    "test": "ava dist/tests",
+    "test:watch": "ava --watch dist/tests",
+    "test:debug": "node node_modules/ava/profile.js dist/tests"
+  },
+  "devDependencies": {
+    "@types/node": "^8.0.28",
+    "ava": "^0.22.0"
+  },
+  "dependencies": {
+    "typescript": "^2.5.2"
+  }
+}
