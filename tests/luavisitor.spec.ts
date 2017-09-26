@@ -3,9 +3,9 @@ import * as ts from "typescript";
 import { LuaVisitor } from "../luavisitor";
 
 function testTransform(source: string) {
-    const visitor = new LuaVisitor();
     const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, true);
-    visitor.traverse(sourceFile, 0);
+    const visitor = new LuaVisitor(sourceFile);
+    visitor.traverse(sourceFile, 0, undefined);
     return visitor.result;
 }
 
@@ -33,6 +33,14 @@ elseif a == 4 then
     b = 4 + (3 * 4)
 else
     c = 4
+end
+`);
+});
+
+
+test(t => {
+    t.is(testTransform(`for (let k = lualength(test); k >= 1; k += -1) {
+}`), `for k = #test, 1, -1 do
 end
 `);
 });

@@ -3,14 +3,53 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var ts = require("typescript");
 var fs = require("fs");
 var luavisitor_1 = require("./luavisitor");
-var sourceFile = ts.createSourceFile("../ovale-ts/sample.ts", fs.readFileSync("../ovale-ts/sample.ts").toString(), ts.ScriptTarget.ES2015, true);
-var luaVisitor = new luavisitor_1.LuaVisitor();
-luaVisitor.traverse(sourceFile, 0);
-if (!fs.existsSync("../ovale-ts/dist"))
-    fs.mkdirSync("../ovale-ts/dist");
-fs.writeFileSync("../ovale-ts/dist/sample.lua", luaVisitor.result);
-for (var _i = 0, _a = luaVisitor.errors; _i < _a.length; _i++) {
-    var error = _a[_i];
-    console.error(error);
+var path = require("path");
+function reportDiagnostics(diagnostics) {
+    diagnostics.forEach(function (diagnostic) {
+        var message = "Error";
+        if (diagnostic.file && diagnostic.start) {
+            var _a = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start), line = _a.line, character = _a.character;
+            message += " " + diagnostic.file.fileName + " (" + (line + 1) + "," + (character + 1) + ")";
+        }
+        message += ": " + ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+        console.error(message);
+    });
+}
+var configFileName = path.join(process.cwd(), process.argv[2] || "..\\ovale-ts\\tsconfig.json");
+var configJson = fs.readFileSync(configFileName).toString();
+var config = ts.parseConfigFileTextToJson(configFileName, configJson);
+if (config.error) {
+    reportDiagnostics([config.error]);
+    process.exit(1);
+}
+var rootPath = path.dirname(configFileName);
+var parsedConfig = ts.parseJsonConfigFileContent(config.config, ts.sys, rootPath);
+if (parsedConfig.errors.length) {
+    reportDiagnostics(parsedConfig.errors);
+    process.exit(1);
+}
+var program = ts.createProgram(parsedConfig.fileNames, parsedConfig.options);
+program.emit();
+var outDir = parsedConfig.options.outDir;
+if (!outDir) {
+    console.error("outDir option must be set");
+    process.exit(1);
+}
+else {
+    for (var _i = 0, _a = program.getSourceFiles(); _i < _a.length; _i++) {
+        var sourceFile = _a[_i];
+        if (sourceFile.isDeclarationFile || sourceFile.fileName.match(/wow\.ts$/))
+            continue; // TODO until it's in a package
+        var luaVisitor = new luavisitor_1.LuaVisitor(sourceFile);
+        luaVisitor.traverse(sourceFile, 0, undefined);
+        var outputPath = path.join(outDir, path.normalize(sourceFile.fileName).replace(rootPath, "")).replace(/\.ts$/, ".lua");
+        if (!fs.existsSync(path.dirname(outputPath)))
+            fs.mkdirSync(path.dirname(outputPath));
+        fs.writeFileSync(outputPath, luaVisitor.result);
+        for (var _b = 0, _c = luaVisitor.errors; _b < _c.length; _b++) {
+            var error = _c[_b];
+            console.error(error);
+        }
+    }
 }
 //# sourceMappingURL=index.js.map

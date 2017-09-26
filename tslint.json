@@ -1,0 +1,17 @@
+{
+    
+    "rules": {
+        "interface-name": [true, "never-prefix"],
+        "no-var-requires": false,
+        "max-line-length": [
+            false
+        ],
+        "object-literal-sort-keys": false,
+        "one-line": [
+            true,
+            "check-open-brace", "check-whitespace" 
+        ],
+        "no-string-literal": false,
+        "forin": false
+    }
+}
