@@ -1,10 +1,36 @@
 import * as ts from "typescript";
+import * as path from "path";
+
+interface Import {
+    module: string;
+    variable: string;
+}
 
 export class LuaVisitor {
-    public result = "";
+    private result = "";
+    private imports: Import[] = [];
+    private addonNameVariable: string;
+    private addonVariable: string;
+    private addonModule: string;
+    private importedVariables: {[name:string]: string} = {};
     public errors:string[] = [];
-
+    
     constructor(private sourceFile: ts.SourceFile)  {}
+
+    getResult() {
+        if (this.imports.length > 0) {
+            if (!this.addonNameVariable) this.addonNameVariable = "__addonName";
+            if (!this.addonVariable) this.addonVariable = "__addon";
+            this.result = `require(${this.addonNameVariable}, ${this.addonVariable}, "${path.basename(this.sourceFile.fileName, ".ts")}", { "${this.imports.map(x => x.module).join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
+${this.result}end))
+`;
+        }
+        if (this.addonNameVariable != undefined) {
+            this.result = `local ${this.addonNameVariable}, ${this.addonVariable} = ...
+${this.result}`;
+        }
+        return this.result;
+    }
 
     writeTabs(tabs: number) {
         for (let i = 0; i < tabs; i++) this.result += "    ";
@@ -16,7 +42,7 @@ export class LuaVisitor {
 
     addTextError(node: ts.Node, text: string) {
         const position = this.sourceFile.getLineAndCharacterOfPosition(node.pos);
-        this.errors.push(`${text} in ${this.sourceFile.fileName}:${position.line}:${position.character}`);
+        this.errors.push(`${text} in ${this.sourceFile.fileName}:${position.line + 1}:${position.character + 1}`);
     }
 
     writeArray<T extends ts.Node>(array: ts.NodeArray<T>, tabs: number, parent: ts.Node, separator: string = ", ") {
@@ -26,7 +52,7 @@ export class LuaVisitor {
         }
     }
 
-    public traverse(node: ts.Node, tabs: number, parent: ts.Node | undefined, options?: { elseIf?: boolean, callee?: boolean }) {
+    public traverse(node: ts.Node, tabs: number, parent: ts.Node | undefined, options?: { elseIf?: boolean, callee?: boolean, class?: string }) {
         switch (node.kind) {
             case ts.SyntaxKind.ArrayBindingPattern:
                 const arrayBindingPattern = <ts.ArrayBindingPattern>node;
@@ -48,6 +74,9 @@ export class LuaVisitor {
                         break;
                     case ts.SyntaxKind.BarBarToken:
                         this.result += " or ";
+                        break;
+                    case ts.SyntaxKind.CaretToken:
+                        this.result += " ^ ";
                         break;
                     case ts.SyntaxKind.EqualsToken:
                         this.result += " = ";
@@ -124,11 +153,65 @@ export class LuaVisitor {
                 }
                 break;
             case ts.SyntaxKind.ClassDeclaration:
-                const classDeclaration = <ts.ClassDeclaration>node;
-                for (const member of  classDeclaration.members) {
-                    this.traverse(member, tabs, node);
+                const classExpression = <ts.ClassDeclaration>node;
+                let className: string|undefined = undefined;
+                if (classExpression.name) {
+                    this.result += "local ";
+                    this.traverse(classExpression.name, tabs, node);
+                    className = classExpression.name.text;
+                    this.result += " = ";
+                }
+                this.result += "__class(";
+                if (classExpression.heritageClauses) {
+                    for (const heritage of classExpression.heritageClauses) {
+                        if (heritage.token === ts.SyntaxKind.ExtendsKeyword) {
+                            this.writeArray(heritage.types, tabs, node);
+                        }
+                    }
+                }
+                this.result += ")\n";
+                for (const member of classExpression.members) {
+                    if (member.kind === ts.SyntaxKind.PropertyDeclaration) continue;
+                    this.traverse(member, tabs, node, { class: className });
                 }
                 break;
+            case ts.SyntaxKind.ComputedPropertyName:
+                const computedPropertyName = <ts.ComputedPropertyName>node;
+                this.result += "[";
+                this.traverse(computedPropertyName.expression, tabs, node);
+                this.result += "]";
+                break;
+            case ts.SyntaxKind.Constructor:
+                {
+                    const constr = <ts.ConstructorDeclaration>node;
+                    this.result += "function ";
+                    const parentClassDeclaration = <ts.ClassDeclaration>parent;
+                    if (parentClassDeclaration.name) this.traverse(parentClassDeclaration.name, tabs, node);
+                    this.result += ":constructor(";
+                    this.writeArray(constr.parameters, tabs, node);
+                    this.result += ")\n"
+                    for (const member of parentClassDeclaration.members) {
+                        if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
+                            this.traverse(member, tabs + 1, node);
+                        }
+                    }
+                    if (constr.body) this.traverse(constr.body, tabs + 1, node);
+                    this.writeTabs(tabs);
+                    this.result += "end\n";
+                    break;
+                }
+            case ts.SyntaxKind.DoStatement:
+                {
+                    const doStatement = <ts.DoStatement>node;
+                    this.writeTabs(tabs);
+                    this.result += "repeat\n";
+                    this.traverse(doStatement.statement, tabs + 1, node);
+                    this.writeTabs(tabs);
+                    this.result += "until not (";
+                    this.traverse(doStatement.expression, tabs, node);
+                    this.result += ")\n";
+                    break;
+                }
             case ts.SyntaxKind.ElementAccessExpression:
                 const elementAccessExpression = <ts.ElementAccessExpression>node;
                 this.traverse(elementAccessExpression.expression, tabs, node);
@@ -145,12 +228,22 @@ export class LuaVisitor {
                 this.traverse((<ts.ExpressionStatement>node).expression, tabs, node);
                 this.result += "\n";
                 break;
+            case ts.SyntaxKind.ExpressionWithTypeArguments:
+                {
+                    const expressionWithTypeArguments = <ts.ExpressionWithTypeArguments>node;
+                    this.traverse(expressionWithTypeArguments.expression, tabs, node);
+                    break;
+                }
             case ts.SyntaxKind.FalseKeyword:
                 this.result += "false";
                 break;
             case ts.SyntaxKind.FirstLiteralToken:
                 const firstLiteralToken = <ts.Identifier>node;
                 this.result += firstLiteralToken.text;
+                break;
+            case ts.SyntaxKind.FirstTemplateToken:
+                const firstTemplateToken = <ts.Identifier>node;
+                this.result += `[[${firstTemplateToken.text}]]`;
                 break;
             case ts.SyntaxKind.ForStatement:
                 const forStatement = <ts.ForStatement>node;
@@ -246,6 +339,12 @@ export class LuaVisitor {
                 else if (identifier.text === "__args") {
                     this.result += "...";
                 }
+                else if (identifier.text === this.addonModule) {
+                    this.result += "...";
+                }
+                else if (this.importedVariables[identifier.text]) {
+                    this.result += this.importedVariables[identifier.text] + "." + identifier.text;
+                }
                 else {
                     this.result += identifier.text;
                 }
@@ -276,6 +375,34 @@ export class LuaVisitor {
                     this.result += "end\n";
                 }
                 break;
+            case ts.SyntaxKind.ImportClause:
+                const importClause = <ts.ImportClause>node;
+                break;
+            case ts.SyntaxKind.ImportDeclaration:
+                const importDeclaration = <ts.ImportDeclaration>node;
+                if (!importDeclaration.importClause) break;
+                const module = <ts.StringLiteral>importDeclaration.moduleSpecifier;
+                if (module.text == "addon" && importDeclaration.importClause.name) {
+                    this.addonModule = importDeclaration.importClause.name.text;
+                }
+                else {
+                    if (importDeclaration.importClause.name) {
+                        this.imports.push({ module: module.text, variable: importDeclaration.importClause.name.text });
+                    }
+                    else if (importDeclaration.importClause.namedBindings) {
+                        const moduleName =  "__" + module.text.replace(/[^\w]/g, "");
+                        this.imports.push({ module: module.text, variable: moduleName});
+                        const namedImports = <ts.NamedImports> importDeclaration.importClause.namedBindings;
+                        for (const variable of namedImports.elements) {
+                            this.importedVariables[variable.name.text] = moduleName;
+                        }
+                    }
+                }
+                break;
+            // case ts.SyntaxKind.ImportSpecifier:
+            //     const importSpecifier = <ts.ImportSpecifier>node;
+            //     importSpecifier.
+            //     break;
             case ts.SyntaxKind.ObjectLiteralExpression:
                 const objectLiteralExpression = <ts.ObjectLiteralExpression>node;
                 if (objectLiteralExpression.properties.length > 0) {
@@ -305,6 +432,13 @@ export class LuaVisitor {
                 this.result += "end\n";
                 break;
 
+            case ts.SyntaxKind.NewExpression:
+                const newExpression = <ts.NewExpression>node;
+                this.traverse(newExpression.expression, tabs, node);
+                this.result += "(";
+                if (newExpression.arguments) this.writeArray(newExpression.arguments, tabs, node);
+                this.result += ")";
+                break;
             case ts.SyntaxKind.Parameter:
                 const parameter = <ts.ParameterDeclaration>node;
                 this.traverse(parameter.name, tabs, node);
@@ -349,6 +483,19 @@ export class LuaVisitor {
                 this.result += " = ";
                 this.traverse(propertyAssignment.initializer, tabs, node);
                 break;
+            case ts.SyntaxKind.PropertyDeclaration:
+                {
+                    const propertyDeclaration = <ts.PropertyDeclaration>node;
+                    if (propertyDeclaration.initializer) {
+                        this.writeTabs(tabs);
+                        this.result += "self.";
+                        this.traverse(propertyDeclaration.name, tabs, node);
+                        this.result += " = ";
+                        this.traverse(propertyDeclaration.initializer, tabs + 1, node);
+                        this.result += "\n";
+                    }
+                    break;
+                }
             case ts.SyntaxKind.ReturnStatement:
                 this.writeTabs(tabs);
                 this.result += "return ";
@@ -378,9 +525,10 @@ export class LuaVisitor {
             case ts.SyntaxKind.VariableDeclaration:
                 const variableDeclaration = <ts.VariableDeclaration>node;
                 this.traverse(variableDeclaration.name, tabs, node);
+                
                 if (variableDeclaration.initializer) {
                     this.result += " = ";
-                    this.traverse(variableDeclaration.initializer, tabs, node);                
+                    this.traverse(variableDeclaration.initializer, tabs, node);    
                 }
                 break;
             case ts.SyntaxKind.VariableDeclarationList:
@@ -390,6 +538,20 @@ export class LuaVisitor {
             case ts.SyntaxKind.VariableStatement:
                 const variableStatement = <ts.VariableStatement>node;
                 this.writeTabs(tabs);
+
+                if (variableStatement.declarationList.declarations.length === 1) {
+                    const variableDeclaration = variableStatement.declarationList.declarations[0];
+                    if (variableDeclaration.initializer && variableDeclaration.initializer.kind === ts.SyntaxKind.Identifier) {
+                        const identifier = <ts.Identifier>variableDeclaration.initializer;
+                        if (identifier.text === this.addonModule) {
+                            const left = <ts.ArrayBindingPattern>variableDeclaration.name
+                            this.addonNameVariable = (<ts.BindingElement>left.elements[0]).name.getText();
+                            this.addonVariable = (<ts.BindingElement>left.elements[1]).name.getText();
+                            break;
+                        }
+                    }                    
+                }
+
                 this.result += "local ";
                 this.traverse(variableStatement.declarationList, tabs, node);
                 this.result += "\n";

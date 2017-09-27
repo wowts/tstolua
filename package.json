@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "license": "MIT",
+  "author": {
+    "name": "Sidoine De Wispelaere"
+  },
   "scripts": {
     "prepublish": "tsc -p .",
     "prepublish:watch": "tsc -w -p .",
@@ -16,5 +19,8 @@
   },
   "dependencies": {
     "typescript": "^2.5.2"
+  },
+  "repository": {
+    "url": "https://github.com/Sidoine/tstolua"
   }
 }

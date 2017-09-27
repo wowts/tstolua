@@ -38,16 +38,23 @@ if (!outDir) {
     console.error("outDir option must be set");
     process.exit(1);
 }
-else {
+else { 
+    let fileList = `<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\\FrameXML\\UI.xsd">\n`;
+    
     for (const sourceFile of program.getSourceFiles()) {
         if (sourceFile.isDeclarationFile || sourceFile.fileName.match(/wow\.ts$/)) continue; // TODO until it's in a package
         const luaVisitor = new LuaVisitor(sourceFile);
         luaVisitor.traverse(sourceFile, 0, undefined);
-        const outputPath = path.join(outDir, path.normalize(sourceFile.fileName).replace(rootPath, "")).replace(/\.ts$/, ".lua");
+        const relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua");
+        const outputPath = path.join(outDir, relativePath);
         if (!fs.existsSync(path.dirname(outputPath))) fs.mkdirSync(path.dirname(outputPath));
-        fs.writeFileSync(outputPath, luaVisitor.result);
+        fs.writeFileSync(outputPath, luaVisitor.getResult());
         for (const error of luaVisitor.errors) {
             console.error(error);
         }
+        fileList += `   <Script file="${relativePath}"/>\n`;
     }
+    fileList += `</Ui>`;
+
+    fs.writeFileSync(path.join(rootPath, "files.xml"), fileList);
 }

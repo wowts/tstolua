@@ -1,12 +1,28 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var ts = require("typescript");
+var path = require("path");
 var LuaVisitor = /** @class */ (function () {
     function LuaVisitor(sourceFile) {
         this.sourceFile = sourceFile;
         this.result = "";
+        this.imports = [];
+        this.importedVariables = {};
         this.errors = [];
     }
+    LuaVisitor.prototype.getResult = function () {
+        if (this.imports.length > 0) {
+            if (!this.addonNameVariable)
+                this.addonNameVariable = "__addonName";
+            if (!this.addonVariable)
+                this.addonVariable = "__addon";
+            this.result = "require(" + this.addonNameVariable + ", " + this.addonVariable + ", \"" + path.basename(this.sourceFile.fileName, ".ts") + "\", { \"" + this.imports.map(function (x) { return x.module; }).join("\", \"") + "\" }, function(__exports, " + this.imports.map(function (x) { return x.variable; }).join(", ") + ")\n" + this.result + "end))\n";
+        }
+        if (this.addonNameVariable != undefined) {
+            this.result = "local " + this.addonNameVariable + ", " + this.addonVariable + " = ...\n" + this.result;
+        }
+        return this.result;
+    };
     LuaVisitor.prototype.writeTabs = function (tabs) {
         for (var i = 0; i < tabs; i++)
             this.result += "    ";
@@ -16,7 +32,7 @@ var LuaVisitor = /** @class */ (function () {
     };
     LuaVisitor.prototype.addTextError = function (node, text) {
         var position = this.sourceFile.getLineAndCharacterOfPosition(node.pos);
-        this.errors.push(text + " in " + this.sourceFile.fileName + ":" + position.line + ":" + position.character);
+        this.errors.push(text + " in " + this.sourceFile.fileName + ":" + (position.line + 1) + ":" + (position.character + 1));
     };
     LuaVisitor.prototype.writeArray = function (array, tabs, parent, separator) {
         if (separator === void 0) { separator = ", "; }
@@ -49,6 +65,9 @@ var LuaVisitor = /** @class */ (function () {
                         break;
                     case ts.SyntaxKind.BarBarToken:
                         this.result += " or ";
+                        break;
+                    case ts.SyntaxKind.CaretToken:
+                        this.result += " ^ ";
                         break;
                     case ts.SyntaxKind.EqualsToken:
                         this.result += " = ";
@@ -125,12 +144,71 @@ var LuaVisitor = /** @class */ (function () {
                 }
                 break;
             case ts.SyntaxKind.ClassDeclaration:
-                var classDeclaration = node;
-                for (var _i = 0, _a = classDeclaration.members; _i < _a.length; _i++) {
-                    var member = _a[_i];
-                    this.traverse(member, tabs, node);
+                var classExpression = node;
+                var className = undefined;
+                if (classExpression.name) {
+                    this.result += "local ";
+                    this.traverse(classExpression.name, tabs, node);
+                    className = classExpression.name.text;
+                    this.result += " = ";
+                }
+                this.result += "__class(";
+                if (classExpression.heritageClauses) {
+                    for (var _i = 0, _a = classExpression.heritageClauses; _i < _a.length; _i++) {
+                        var heritage = _a[_i];
+                        if (heritage.token === ts.SyntaxKind.ExtendsKeyword) {
+                            this.writeArray(heritage.types, tabs, node);
+                        }
+                    }
+                }
+                this.result += ")\n";
+                for (var _b = 0, _c = classExpression.members; _b < _c.length; _b++) {
+                    var member = _c[_b];
+                    if (member.kind === ts.SyntaxKind.PropertyDeclaration)
+                        continue;
+                    this.traverse(member, tabs, node, { class: className });
                 }
                 break;
+            case ts.SyntaxKind.ComputedPropertyName:
+                var computedPropertyName = node;
+                this.result += "[";
+                this.traverse(computedPropertyName.expression, tabs, node);
+                this.result += "]";
+                break;
+            case ts.SyntaxKind.Constructor:
+                {
+                    var constr = node;
+                    this.result += "function ";
+                    var parentClassDeclaration_1 = parent;
+                    if (parentClassDeclaration_1.name)
+                        this.traverse(parentClassDeclaration_1.name, tabs, node);
+                    this.result += ":constructor(";
+                    this.writeArray(constr.parameters, tabs, node);
+                    this.result += ")\n";
+                    for (var _d = 0, _e = parentClassDeclaration_1.members; _d < _e.length; _d++) {
+                        var member = _e[_d];
+                        if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
+                            this.traverse(member, tabs + 1, node);
+                        }
+                    }
+                    if (constr.body)
+                        this.traverse(constr.body, tabs + 1, node);
+                    this.writeTabs(tabs);
+                    this.result += "end\n";
+                    break;
+                }
+            case ts.SyntaxKind.DoStatement:
+                {
+                    var doStatement = node;
+                    this.writeTabs(tabs);
+                    this.result += "repeat\n";
+                    this.traverse(doStatement.statement, tabs + 1, node);
+                    this.writeTabs(tabs);
+                    this.result += "until not (";
+                    this.traverse(doStatement.expression, tabs, node);
+                    this.result += ")\n";
+                    break;
+                }
             case ts.SyntaxKind.ElementAccessExpression:
                 var elementAccessExpression = node;
                 this.traverse(elementAccessExpression.expression, tabs, node);
@@ -147,12 +225,22 @@ var LuaVisitor = /** @class */ (function () {
                 this.traverse(node.expression, tabs, node);
                 this.result += "\n";
                 break;
+            case ts.SyntaxKind.ExpressionWithTypeArguments:
+                {
+                    var expressionWithTypeArguments = node;
+                    this.traverse(expressionWithTypeArguments.expression, tabs, node);
+                    break;
+                }
             case ts.SyntaxKind.FalseKeyword:
                 this.result += "false";
                 break;
             case ts.SyntaxKind.FirstLiteralToken:
                 var firstLiteralToken = node;
                 this.result += firstLiteralToken.text;
+                break;
+            case ts.SyntaxKind.FirstTemplateToken:
+                var firstTemplateToken = node;
+                this.result += "[[" + firstTemplateToken.text + "]]";
                 break;
             case ts.SyntaxKind.ForStatement:
                 var forStatement = node;
@@ -240,6 +328,12 @@ var LuaVisitor = /** @class */ (function () {
                 else if (identifier.text === "__args") {
                     this.result += "...";
                 }
+                else if (identifier.text === this.addonModule) {
+                    this.result += "...";
+                }
+                else if (this.importedVariables[identifier.text]) {
+                    this.result += this.importedVariables[identifier.text] + "." + identifier.text;
+                }
                 else {
                     this.result += identifier.text;
                 }
@@ -270,6 +364,36 @@ var LuaVisitor = /** @class */ (function () {
                     this.result += "end\n";
                 }
                 break;
+            case ts.SyntaxKind.ImportClause:
+                var importClause = node;
+                break;
+            case ts.SyntaxKind.ImportDeclaration:
+                var importDeclaration = node;
+                if (!importDeclaration.importClause)
+                    break;
+                var module_1 = importDeclaration.moduleSpecifier;
+                if (module_1.text == "addon" && importDeclaration.importClause.name) {
+                    this.addonModule = importDeclaration.importClause.name.text;
+                }
+                else {
+                    if (importDeclaration.importClause.name) {
+                        this.imports.push({ module: module_1.text, variable: importDeclaration.importClause.name.text });
+                    }
+                    else if (importDeclaration.importClause.namedBindings) {
+                        var moduleName = "__" + module_1.text.replace(/[^\w]/g, "");
+                        this.imports.push({ module: module_1.text, variable: moduleName });
+                        var namedImports = importDeclaration.importClause.namedBindings;
+                        for (var _f = 0, _g = namedImports.elements; _f < _g.length; _f++) {
+                            var variable = _g[_f];
+                            this.importedVariables[variable.name.text] = moduleName;
+                        }
+                    }
+                }
+                break;
+            // case ts.SyntaxKind.ImportSpecifier:
+            //     const importSpecifier = <ts.ImportSpecifier>node;
+            //     importSpecifier.
+            //     break;
             case ts.SyntaxKind.ObjectLiteralExpression:
                 var objectLiteralExpression = node;
                 if (objectLiteralExpression.properties.length > 0) {
@@ -299,6 +423,14 @@ var LuaVisitor = /** @class */ (function () {
                     this.traverse(methodDeclaration.body, tabs + 1, node);
                 this.writeTabs(tabs);
                 this.result += "end\n";
+                break;
+            case ts.SyntaxKind.NewExpression:
+                var newExpression = node;
+                this.traverse(newExpression.expression, tabs, node);
+                this.result += "(";
+                if (newExpression.arguments)
+                    this.writeArray(newExpression.arguments, tabs, node);
+                this.result += ")";
                 break;
             case ts.SyntaxKind.Parameter:
                 var parameter = node;
@@ -344,6 +476,19 @@ var LuaVisitor = /** @class */ (function () {
                 this.result += " = ";
                 this.traverse(propertyAssignment.initializer, tabs, node);
                 break;
+            case ts.SyntaxKind.PropertyDeclaration:
+                {
+                    var propertyDeclaration = node;
+                    if (propertyDeclaration.initializer) {
+                        this.writeTabs(tabs);
+                        this.result += "self.";
+                        this.traverse(propertyDeclaration.name, tabs, node);
+                        this.result += " = ";
+                        this.traverse(propertyDeclaration.initializer, tabs + 1, node);
+                        this.result += "\n";
+                    }
+                    break;
+                }
             case ts.SyntaxKind.ReturnStatement:
                 this.writeTabs(tabs);
                 this.result += "return ";
@@ -385,6 +530,18 @@ var LuaVisitor = /** @class */ (function () {
             case ts.SyntaxKind.VariableStatement:
                 var variableStatement = node;
                 this.writeTabs(tabs);
+                if (variableStatement.declarationList.declarations.length === 1) {
+                    var variableDeclaration_1 = variableStatement.declarationList.declarations[0];
+                    if (variableDeclaration_1.initializer && variableDeclaration_1.initializer.kind === ts.SyntaxKind.Identifier) {
+                        var identifier_1 = variableDeclaration_1.initializer;
+                        if (identifier_1.text === this.addonModule) {
+                            var left = variableDeclaration_1.name;
+                            this.addonNameVariable = left.elements[0].name.getText();
+                            this.addonVariable = left.elements[1].name.getText();
+                            break;
+                        }
+                    }
+                }
                 this.result += "local ";
                 this.traverse(variableStatement.declarationList, tabs, node);
                 this.result += "\n";

@@ -36,20 +36,25 @@ if (!outDir) {
     process.exit(1);
 }
 else {
+    var fileList = "<Ui xmlns=\"http://www.blizzard.com/wow/ui/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.blizzard.com/wow/ui/ ..\\FrameXML\\UI.xsd\">\n";
     for (var _i = 0, _a = program.getSourceFiles(); _i < _a.length; _i++) {
         var sourceFile = _a[_i];
         if (sourceFile.isDeclarationFile || sourceFile.fileName.match(/wow\.ts$/))
             continue; // TODO until it's in a package
         var luaVisitor = new luavisitor_1.LuaVisitor(sourceFile);
         luaVisitor.traverse(sourceFile, 0, undefined);
-        var outputPath = path.join(outDir, path.normalize(sourceFile.fileName).replace(rootPath, "")).replace(/\.ts$/, ".lua");
+        var relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua");
+        var outputPath = path.join(outDir, relativePath);
         if (!fs.existsSync(path.dirname(outputPath)))
             fs.mkdirSync(path.dirname(outputPath));
-        fs.writeFileSync(outputPath, luaVisitor.result);
+        fs.writeFileSync(outputPath, luaVisitor.getResult());
         for (var _b = 0, _c = luaVisitor.errors; _b < _c.length; _b++) {
             var error = _c[_b];
             console.error(error);
         }
+        fileList += "   <Script file=\"" + relativePath + "\"/>\n";
     }
+    fileList += "</Ui>";
+    fs.writeFileSync(path.join(rootPath, "files.xml"), fileList);
 }
 //# sourceMappingURL=index.js.map
