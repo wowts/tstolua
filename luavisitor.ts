@@ -23,12 +23,24 @@ export class LuaVisitor {
     constructor(private sourceFile: ts.SourceFile)  {}
 
     getResult() {
-        if (this.imports.length > 0) {
+        let hasExportedVariables = this.imports.length > 0;
+        for (const key in this.exportedVariables) {
+            hasExportedVariables = true;
+            break;
+        }
+        if (hasExportedVariables) {
             if (!this.addonNameVariable) this.addonNameVariable = "__addonName";
             if (!this.addonVariable) this.addonVariable = "__addon";
-            this.result = `require(${this.addonNameVariable}, ${this.addonVariable}, "${path.basename(this.sourceFile.fileName, ".ts")}", { "${this.imports.map(x => x.module).join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
-${this.result}end))
+            if (this.imports.length > 0) {
+                this.result = `${this.addonVariable}.require(${this.addonNameVariable}, ${this.addonVariable}, "${path.basename(this.sourceFile.fileName, ".ts")}", { "${this.imports.map(x => x.module).join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
+${this.result}end)
 `;
+            }
+            else {
+                this.result = `${this.addonVariable}.require(${this.addonNameVariable}, ${this.addonVariable}, "${path.basename(this.sourceFile.fileName, ".ts")}", {}, function(__exports)
+${this.result}end)
+`;
+            }
         }
         if (this.addonNameVariable != undefined) {
             this.result = `local ${this.addonNameVariable}, ${this.addonVariable} = ...
@@ -196,32 +208,28 @@ ${this.result}`;
                         isExport = this.writeLocalOrExport(classExpression);
                         this.traverse(classExpression.name, tabs, node);
                         className = classExpression.name.text;
+                        if (isExport) {
+                            this.exportedVariables[className] = true;
+                        }                        
                         this.result += " = ";
                     }
                     this.result += "__class(";
-                    if (classExpression.heritageClauses) {
-                        this.writeHeritage(classExpression, tabs, node);
-                    }
-                    else {
+                    if (!this.writeHeritage(classExpression, tabs, node)) {
                         this.result += "nil";
                     }
-                    this.result += ", ";
+                    this.result += ", {\n";
                     for (const member of classExpression.members) {
                         if (member.kind === ts.SyntaxKind.PropertyDeclaration) continue;
-                        this.traverse(member, tabs, node, { class: className });
+                        this.traverse(member, tabs + 1, node, { class: className });
                     }
                     if (this.classDeclarations.length > 0) {
                         this.currentClassDeclaration = this.classDeclarations.pop();
                     }
                     else {
                         this.currentClassDeclaration = undefined;
-                    }                
-                    this.result += ")\n";
-                    if (isExport) {
-                        this.writeTabs(tabs);
-                        this.result += `local ${className} = __exports.${className}\n`;
-                    }
-                    
+                    } 
+                    this.writeTabs(tabs);     
+                    this.result += "})\n";
                     break;
                 }
             case ts.SyntaxKind.ClassExpression: 
@@ -243,7 +251,8 @@ ${this.result}`;
                         if (member.kind === ts.SyntaxKind.PropertyDeclaration) continue;
                         this.traverse(member, tabs + 1, node);
                     }
-                    this.result += "})\n";
+                    this.writeTabs(tabs);
+                    this.result += "})";
                     if (this.classDeclarations.length > 0) {
                         this.currentClassDeclaration = this.classDeclarations.pop();
                     }
@@ -408,7 +417,7 @@ ${this.result}`;
                         this.traverse(functionDeclaration.body, tabs + 1, node);
                     }
                     this.writeTabs(tabs);
-                    this.result += "end";
+                    this.result += "end\n";
                     break;
                 }
             case ts.SyntaxKind.FunctionExpression:
@@ -418,11 +427,14 @@ ${this.result}`;
                 this.result += ")\n";
                 this.traverse(functionExpression.body, tabs + 1, node);
                 this.writeTabs(tabs);
-                this.result += "end";
+                this.result += "end\n";
                 break;
             case ts.SyntaxKind.Identifier:
                 const identifier = <ts.Identifier>node;
-                if (identifier.text === "undefined") {
+                if (identifier.text === "rest") {
+                    this.result += "...";
+                }
+                else if (identifier.text === "undefined") {
                     this.result += "nil";
                 }
                 else if (identifier.text === "__args") {
@@ -573,7 +585,14 @@ ${this.result}`;
             case ts.SyntaxKind.PropertyAssignment:
                 const propertyAssignment = <ts.PropertyAssignment>node;
                 this.writeTabs(tabs);
-                this.traverse(propertyAssignment.name, tabs, node);
+                if (propertyAssignment.name.getText().match(/^\d/)) {
+                    this.result += "[";
+                    this.traverse(propertyAssignment.name, tabs, node);
+                    this.result += "]";
+                }
+                else {
+                    this.traverse(propertyAssignment.name, tabs, node);
+                }
                 this.result += " = ";
                 this.traverse(propertyAssignment.initializer, tabs, node);
                 break;
@@ -608,7 +627,7 @@ ${this.result}`;
                 break;
             case ts.SyntaxKind.StringLiteral:
                 const stringLiteral = <ts.StringLiteral>node;
-                this.result += '"' + stringLiteral.text.replace("\n", "\\n") + '"';
+                this.result += '"' + stringLiteral.text.replace("\r", "\\r").replace("\n", "\\n").replace(/"/g, '\\"') + '"';
                 break;
             case ts.SyntaxKind.SuperKeyword:
                 {
@@ -620,6 +639,19 @@ ${this.result}`;
                     this.result += ".constructor";
                     break;
                 }
+            case ts.SyntaxKind.TemplateExpression:
+                {
+                    const templateExpression = <ts.TemplateExpression>node;
+                    // for (const templateSpan of templateExpression.templateSpans) {
+                    this.writeArray(templateExpression.templateSpans, tabs, node, " .. ");
+                    break;
+                }
+            case ts.SyntaxKind.TemplateSpan:
+                {
+                    const templateSpan = <ts.TemplateSpan>node;
+                    this.traverse(templateSpan.expression, tabs, node);
+                    break; 
+                }
             case ts.SyntaxKind.ThisKeyword:
                 this.result += "self";
                 break;
@@ -630,8 +662,11 @@ ${this.result}`;
                 // Type alias declaration is not needed
                 break;
             case ts.SyntaxKind.TypeAssertionExpression:
-                // Cast is not needed
-                break;
+                {
+                    const typeAssertionExpression = <ts.TypeAssertion>node;
+                    this.traverse(typeAssertionExpression.expression, tabs, node);
+                    break;
+                }
             case ts.SyntaxKind.VariableDeclaration:
                 const variableDeclaration = <ts.VariableDeclaration>node;
                 this.traverse(variableDeclaration.name, tabs, node, options);
@@ -662,8 +697,14 @@ ${this.result}`;
                     }                    
                 }
                 
-                const isExport = this.writeLocalOrExport(variableStatement);
+                if (this.hasExportModifier(variableStatement) && variableStatement.declarationList.declarations.every(x => x.initializer == undefined)) {
+                    for (const declaration of variableStatement.declarationList.declarations) {
+                        this.exportedVariables[declaration.name.getText()] = true;
+                    }
+                    break;
+                }
 
+                const isExport = this.writeLocalOrExport(variableStatement);
                 this.traverse(variableStatement.declarationList, tabs, node, { export: isExport });
                 this.result += "\n";
                 break;
@@ -692,17 +733,20 @@ ${this.result}`;
         }
     }
 
-    private writeHeritage(classExpression: ts.ClassDeclaration | ts.ClassExpression, tabs: number, node: ts.Node) {
-        if (!classExpression.heritageClauses) return;
+    private writeHeritage(classExpression: ts.ClassLikeDeclaration, tabs: number, node: ts.Node) {
+        if (!classExpression.heritageClauses) return false;
+        let found = false;
         for(const heritage of classExpression.heritageClauses) {
             if(heritage.token === ts.SyntaxKind.ExtendsKeyword) {
-            this.writeArray(heritage.types, tabs, node);
+                this.writeArray(heritage.types, tabs, node);
+                found = true;
             }
         }
+        return found;
     }
 
     private writeLocalOrExport(node: ts.Node) {
-        if(node.modifiers && node.modifiers.some(x => x.kind === ts.SyntaxKind.ExportKeyword)) {
+        if(this.hasExportModifier(node)) {
             this.result += "__exports.";
             return true;
         }
@@ -710,5 +754,9 @@ ${this.result}`;
             this.result += "local ";
             return false;
         }
+    }
+
+    private hasExportModifier(node: ts.Node) {
+        return node.modifiers && node.modifiers.some(x => x.kind === ts.SyntaxKind.ExportKeyword);
     }
 }

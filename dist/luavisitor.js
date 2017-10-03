@@ -14,12 +14,22 @@ var LuaVisitor = /** @class */ (function () {
         this.errors = [];
     }
     LuaVisitor.prototype.getResult = function () {
-        if (this.imports.length > 0) {
+        var hasExportedVariables = this.imports.length > 0;
+        for (var key in this.exportedVariables) {
+            hasExportedVariables = true;
+            break;
+        }
+        if (hasExportedVariables) {
             if (!this.addonNameVariable)
                 this.addonNameVariable = "__addonName";
             if (!this.addonVariable)
                 this.addonVariable = "__addon";
-            this.result = "require(" + this.addonNameVariable + ", " + this.addonVariable + ", \"" + path.basename(this.sourceFile.fileName, ".ts") + "\", { \"" + this.imports.map(function (x) { return x.module; }).join("\", \"") + "\" }, function(__exports, " + this.imports.map(function (x) { return x.variable; }).join(", ") + ")\n" + this.result + "end))\n";
+            if (this.imports.length > 0) {
+                this.result = this.addonVariable + ".require(" + this.addonNameVariable + ", " + this.addonVariable + ", \"" + path.basename(this.sourceFile.fileName, ".ts") + "\", { \"" + this.imports.map(function (x) { return x.module; }).join("\", \"") + "\" }, function(__exports, " + this.imports.map(function (x) { return x.variable; }).join(", ") + ")\n" + this.result + "end)\n";
+            }
+            else {
+                this.result = this.addonVariable + ".require(" + this.addonNameVariable + ", " + this.addonVariable + ", \"" + path.basename(this.sourceFile.fileName, ".ts") + "\", {}, function(__exports)\n" + this.result + "end)\n";
+            }
         }
         if (this.addonNameVariable != undefined) {
             this.result = "local " + this.addonNameVariable + ", " + this.addonVariable + " = ...\n" + this.result;
@@ -184,21 +194,21 @@ var LuaVisitor = /** @class */ (function () {
                         isExport_1 = this.writeLocalOrExport(classExpression);
                         this.traverse(classExpression.name, tabs, node);
                         className = classExpression.name.text;
+                        if (isExport_1) {
+                            this.exportedVariables[className] = true;
+                        }
                         this.result += " = ";
                     }
                     this.result += "__class(";
-                    if (classExpression.heritageClauses) {
-                        this.writeHeritage(classExpression, tabs, node);
-                    }
-                    else {
+                    if (!this.writeHeritage(classExpression, tabs, node)) {
                         this.result += "nil";
                     }
-                    this.result += ", ";
+                    this.result += ", {\n";
                     for (var _i = 0, _a = classExpression.members; _i < _a.length; _i++) {
                         var member = _a[_i];
                         if (member.kind === ts.SyntaxKind.PropertyDeclaration)
                             continue;
-                        this.traverse(member, tabs, node, { class: className });
+                        this.traverse(member, tabs + 1, node, { class: className });
                     }
                     if (this.classDeclarations.length > 0) {
                         this.currentClassDeclaration = this.classDeclarations.pop();
@@ -206,11 +216,8 @@ var LuaVisitor = /** @class */ (function () {
                     else {
                         this.currentClassDeclaration = undefined;
                     }
-                    this.result += ")\n";
-                    if (isExport_1) {
-                        this.writeTabs(tabs);
-                        this.result += "local " + className + " = __exports." + className + "\n";
-                    }
+                    this.writeTabs(tabs);
+                    this.result += "})\n";
                     break;
                 }
             case ts.SyntaxKind.ClassExpression:
@@ -234,7 +241,8 @@ var LuaVisitor = /** @class */ (function () {
                             continue;
                         this.traverse(member, tabs + 1, node);
                     }
-                    this.result += "})\n";
+                    this.writeTabs(tabs);
+                    this.result += "})";
                     if (this.classDeclarations.length > 0) {
                         this.currentClassDeclaration = this.classDeclarations.pop();
                     }
@@ -393,7 +401,7 @@ var LuaVisitor = /** @class */ (function () {
                         this.traverse(functionDeclaration.body, tabs + 1, node);
                     }
                     this.writeTabs(tabs);
-                    this.result += "end";
+                    this.result += "end\n";
                     break;
                 }
             case ts.SyntaxKind.FunctionExpression:
@@ -403,11 +411,14 @@ var LuaVisitor = /** @class */ (function () {
                 this.result += ")\n";
                 this.traverse(functionExpression.body, tabs + 1, node);
                 this.writeTabs(tabs);
-                this.result += "end";
+                this.result += "end\n";
                 break;
             case ts.SyntaxKind.Identifier:
                 var identifier = node;
-                if (identifier.text === "undefined") {
+                if (identifier.text === "rest") {
+                    this.result += "...";
+                }
+                else if (identifier.text === "undefined") {
                     this.result += "nil";
                 }
                 else if (identifier.text === "__args") {
@@ -562,7 +573,14 @@ var LuaVisitor = /** @class */ (function () {
             case ts.SyntaxKind.PropertyAssignment:
                 var propertyAssignment = node;
                 this.writeTabs(tabs);
-                this.traverse(propertyAssignment.name, tabs, node);
+                if (propertyAssignment.name.getText().match(/^\d/)) {
+                    this.result += "[";
+                    this.traverse(propertyAssignment.name, tabs, node);
+                    this.result += "]";
+                }
+                else {
+                    this.traverse(propertyAssignment.name, tabs, node);
+                }
                 this.result += " = ";
                 this.traverse(propertyAssignment.initializer, tabs, node);
                 break;
@@ -597,7 +615,7 @@ var LuaVisitor = /** @class */ (function () {
                 break;
             case ts.SyntaxKind.StringLiteral:
                 var stringLiteral = node;
-                this.result += '"' + stringLiteral.text.replace("\n", "\\n") + '"';
+                this.result += '"' + stringLiteral.text.replace("\r", "\\r").replace("\n", "\\n").replace(/"/g, '\\"') + '"';
                 break;
             case ts.SyntaxKind.SuperKeyword:
                 {
@@ -607,6 +625,19 @@ var LuaVisitor = /** @class */ (function () {
                     }
                     this.writeHeritage(this.currentClassDeclaration, tabs, node);
                     this.result += ".constructor";
+                    break;
+                }
+            case ts.SyntaxKind.TemplateExpression:
+                {
+                    var templateExpression = node;
+                    // for (const templateSpan of templateExpression.templateSpans) {
+                    this.writeArray(templateExpression.templateSpans, tabs, node, " .. ");
+                    break;
+                }
+            case ts.SyntaxKind.TemplateSpan:
+                {
+                    var templateSpan = node;
+                    this.traverse(templateSpan.expression, tabs, node);
                     break;
                 }
             case ts.SyntaxKind.ThisKeyword:
@@ -619,8 +650,11 @@ var LuaVisitor = /** @class */ (function () {
                 // Type alias declaration is not needed
                 break;
             case ts.SyntaxKind.TypeAssertionExpression:
-                // Cast is not needed
-                break;
+                {
+                    var typeAssertionExpression = node;
+                    this.traverse(typeAssertionExpression.expression, tabs, node);
+                    break;
+                }
             case ts.SyntaxKind.VariableDeclaration:
                 var variableDeclaration = node;
                 this.traverse(variableDeclaration.name, tabs, node, options);
@@ -647,6 +681,13 @@ var LuaVisitor = /** @class */ (function () {
                             break;
                         }
                     }
+                }
+                if (this.hasExportModifier(variableStatement) && variableStatement.declarationList.declarations.every(function (x) { return x.initializer == undefined; })) {
+                    for (var _h = 0, _j = variableStatement.declarationList.declarations; _h < _j.length; _h++) {
+                        var declaration = _j[_h];
+                        this.exportedVariables[declaration.name.getText()] = true;
+                    }
+                    break;
                 }
                 var isExport = this.writeLocalOrExport(variableStatement);
                 this.traverse(variableStatement.declarationList, tabs, node, { export: isExport });
@@ -679,16 +720,19 @@ var LuaVisitor = /** @class */ (function () {
     };
     LuaVisitor.prototype.writeHeritage = function (classExpression, tabs, node) {
         if (!classExpression.heritageClauses)
-            return;
+            return false;
+        var found = false;
         for (var _i = 0, _a = classExpression.heritageClauses; _i < _a.length; _i++) {
             var heritage = _a[_i];
             if (heritage.token === ts.SyntaxKind.ExtendsKeyword) {
                 this.writeArray(heritage.types, tabs, node);
+                found = true;
             }
         }
+        return found;
     };
     LuaVisitor.prototype.writeLocalOrExport = function (node) {
-        if (node.modifiers && node.modifiers.some(function (x) { return x.kind === ts.SyntaxKind.ExportKeyword; })) {
+        if (this.hasExportModifier(node)) {
             this.result += "__exports.";
             return true;
         }
@@ -696,6 +740,9 @@ var LuaVisitor = /** @class */ (function () {
             this.result += "local ";
             return false;
         }
+    };
+    LuaVisitor.prototype.hasExportModifier = function (node) {
+        return node.modifiers && node.modifiers.some(function (x) { return x.kind === ts.SyntaxKind.ExportKeyword; });
     };
     return LuaVisitor;
 }());

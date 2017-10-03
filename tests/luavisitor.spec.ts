@@ -51,9 +51,9 @@ test(t => {
             super(16);
         }
 }`), `local Test = __class(Base, {
-    constructor = function()
+    constructor = function(self)
         Base.constructor(self, 16)
-    end
+    end,
 })
 `); 
 });
@@ -66,10 +66,10 @@ let a = OvaleScripts;
 import Test from 'Test';
 export const bla = 3;
 `), `local OVALE, Ovale = ...
-require(OVALE, Ovale, "source", { "./OvaleScripts", "Test" }, function(__exports, __OvaleScripts, Test)
+Ovale.require(OVALE, Ovale, "source", { "./OvaleScripts", "Test" }, function(__exports, __OvaleScripts, Test)
 local a = __OvaleScripts.OvaleScripts
 __exports.bla = 3
-end))
+end)
 `);
 });
 
@@ -108,7 +108,7 @@ test(t => {
         self.a = 3
         self.a = a
     end,
-    bla = function()
+    bla = function(self)
         self.a = 4
     end,
 })
@@ -155,4 +155,20 @@ test(t => {
     end,
 })
 `);
+});
+
+test(t => {
+    t.is(testTransform("3 + 3"), "3 + 3\n");
+});
+
+
+test(t => {
+    t.is(testTransform("a = { 1: 'a' }"), `a = {
+    [1] = "a"
+}
+`);
+});
+
+test(t => {
+    t.is(testTransform("`${'3'}${3}"), "\"3\" .. 3\n");
 });

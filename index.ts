@@ -15,7 +15,7 @@ function reportDiagnostics(diagnostics: ts.Diagnostic[]): void {
     });
 }
 
-const configFileName = path.join(process.cwd(), process.argv[2] || "..\\ovale-ts\\tsconfig.json");
+const configFileName = path.resolve(process.argv[2] || "..\\ovale-ts\\tsconfig.json");
 
 const configJson = fs.readFileSync(configFileName).toString();
 const config = ts.parseConfigFileTextToJson(configFileName, configJson);
@@ -45,7 +45,7 @@ else {
         if (sourceFile.isDeclarationFile || sourceFile.fileName.match(/wow\.ts$/)) continue; // TODO until it's in a package
         const luaVisitor = new LuaVisitor(sourceFile);
         luaVisitor.traverse(sourceFile, 0, undefined);
-        const relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua").replace("^[\\/]","");
+        const relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua").replace(/^[\\/]/,"");
         const outputPath = path.join(outDir, relativePath);
         if (!fs.existsSync(path.dirname(outputPath))) fs.mkdirSync(path.dirname(outputPath));
         fs.writeFileSync(outputPath, luaVisitor.getResult());

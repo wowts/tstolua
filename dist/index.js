@@ -15,7 +15,7 @@ function reportDiagnostics(diagnostics) {
         console.error(message);
     });
 }
-var configFileName = path.join(process.cwd(), process.argv[2] || "..\\ovale-ts\\tsconfig.json");
+var configFileName = path.resolve(process.argv[2] || "..\\ovale-ts\\tsconfig.json");
 var configJson = fs.readFileSync(configFileName).toString();
 var config = ts.parseConfigFileTextToJson(configFileName, configJson);
 if (config.error) {
@@ -43,7 +43,7 @@ else {
             continue; // TODO until it's in a package
         var luaVisitor = new luavisitor_1.LuaVisitor(sourceFile);
         luaVisitor.traverse(sourceFile, 0, undefined);
-        var relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua").replace("^[\\/]", "");
+        var relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua").replace(/^[\\/]/, "");
         var outputPath = path.join(outDir, relativePath);
         if (!fs.existsSync(path.dirname(outputPath)))
             fs.mkdirSync(path.dirname(outputPath));
