@@ -8,6 +8,9 @@ var LuaVisitor = /** @class */ (function () {
         this.result = "";
         this.imports = [];
         this.importedVariables = {};
+        this.exportedVariables = {};
+        this.classDeclarations = [];
+        this.currentClassDeclaration = undefined;
         this.errors = [];
     }
     LuaVisitor.prototype.getResult = function () {
@@ -34,16 +37,17 @@ var LuaVisitor = /** @class */ (function () {
         var position = this.sourceFile.getLineAndCharacterOfPosition(node.pos);
         this.errors.push(text + " in " + this.sourceFile.fileName + ":" + (position.line + 1) + ":" + (position.character + 1));
     };
-    LuaVisitor.prototype.writeArray = function (array, tabs, parent, separator) {
+    LuaVisitor.prototype.writeArray = function (array, tabs, parent, separator, options) {
         if (separator === void 0) { separator = ", "; }
         for (var i = 0; i < array.length; i++) {
             if (i > 0)
                 this.result += separator;
-            this.traverse(array[i], tabs, parent);
+            this.traverse(array[i], tabs, parent, options);
         }
     };
     LuaVisitor.prototype.traverse = function (node, tabs, parent, options) {
         var _this = this;
+        node.parent = parent;
         switch (node.kind) {
             case ts.SyntaxKind.ArrayBindingPattern:
                 var arrayBindingPattern = node;
@@ -52,6 +56,23 @@ var LuaVisitor = /** @class */ (function () {
             case ts.SyntaxKind.ArrayLiteralExpression:
                 var arrayLiteralExpression = node;
                 this.writeArray(arrayLiteralExpression.elements, tabs, node);
+                break;
+            case ts.SyntaxKind.ArrowFunction:
+                var arrowFunction = node;
+                this.result += "function(";
+                this.writeArray(arrowFunction.parameters, tabs, node);
+                this.result += ")\n";
+                if (arrowFunction.body.kind === ts.SyntaxKind.Block) {
+                    this.traverse(arrowFunction.body, tabs + 1, node);
+                }
+                else {
+                    this.writeTabs(tabs + 1);
+                    this.result += "return ";
+                    this.traverse(arrowFunction.body, tabs, node);
+                    this.result += "\n";
+                }
+                this.writeTabs(tabs);
+                this.result += "end";
                 break;
             case ts.SyntaxKind.BinaryExpression:
                 var binary = node;
@@ -72,10 +93,12 @@ var LuaVisitor = /** @class */ (function () {
                     case ts.SyntaxKind.EqualsToken:
                         this.result += " = ";
                         break;
+                    case ts.SyntaxKind.EqualsEqualsEqualsToken:
                     case ts.SyntaxKind.EqualsEqualsToken:
                         this.result += " == ";
                         break;
                     case ts.SyntaxKind.ExclamationEqualsToken:
+                    case ts.SyntaxKind.ExclamationEqualsEqualsToken:
                         this.result += " ~= ";
                         break;
                     case ts.SyntaxKind.GreaterThanToken:
@@ -139,36 +162,87 @@ var LuaVisitor = /** @class */ (function () {
                 else {
                     this.traverse(callExpression.expression, tabs, node, { callee: true });
                     this.result += "(";
+                    if (callExpression.expression.kind === ts.SyntaxKind.SuperKeyword) {
+                        this.result += "self";
+                        if (callExpression.arguments.length)
+                            this.result += ", ";
+                    }
                     this.writeArray(callExpression.arguments, tabs, node);
                     this.result += ")";
                 }
                 break;
             case ts.SyntaxKind.ClassDeclaration:
-                var classExpression = node;
-                var className = undefined;
-                if (classExpression.name) {
-                    this.result += "local ";
-                    this.traverse(classExpression.name, tabs, node);
-                    className = classExpression.name.text;
-                    this.result += " = ";
-                }
-                this.result += "__class(";
-                if (classExpression.heritageClauses) {
-                    for (var _i = 0, _a = classExpression.heritageClauses; _i < _a.length; _i++) {
-                        var heritage = _a[_i];
-                        if (heritage.token === ts.SyntaxKind.ExtendsKeyword) {
-                            this.writeArray(heritage.types, tabs, node);
-                        }
+                {
+                    var classExpression = node;
+                    if (this.currentClassDeclaration) {
+                        this.classDeclarations.push(this.currentClassDeclaration);
                     }
+                    this.currentClassDeclaration = classExpression;
+                    var className = undefined;
+                    var isExport_1 = false;
+                    if (classExpression.name) {
+                        isExport_1 = this.writeLocalOrExport(classExpression);
+                        this.traverse(classExpression.name, tabs, node);
+                        className = classExpression.name.text;
+                        this.result += " = ";
+                    }
+                    this.result += "__class(";
+                    if (classExpression.heritageClauses) {
+                        this.writeHeritage(classExpression, tabs, node);
+                    }
+                    else {
+                        this.result += "nil";
+                    }
+                    this.result += ", ";
+                    for (var _i = 0, _a = classExpression.members; _i < _a.length; _i++) {
+                        var member = _a[_i];
+                        if (member.kind === ts.SyntaxKind.PropertyDeclaration)
+                            continue;
+                        this.traverse(member, tabs, node, { class: className });
+                    }
+                    if (this.classDeclarations.length > 0) {
+                        this.currentClassDeclaration = this.classDeclarations.pop();
+                    }
+                    else {
+                        this.currentClassDeclaration = undefined;
+                    }
+                    this.result += ")\n";
+                    if (isExport_1) {
+                        this.writeTabs(tabs);
+                        this.result += "local " + className + " = __exports." + className + "\n";
+                    }
+                    break;
                 }
-                this.result += ")\n";
-                for (var _b = 0, _c = classExpression.members; _b < _c.length; _b++) {
-                    var member = _c[_b];
-                    if (member.kind === ts.SyntaxKind.PropertyDeclaration)
-                        continue;
-                    this.traverse(member, tabs, node, { class: className });
+            case ts.SyntaxKind.ClassExpression:
+                {
+                    var classExpression = node;
+                    if (this.currentClassDeclaration) {
+                        this.classDeclarations.push(this.currentClassDeclaration);
+                    }
+                    this.currentClassDeclaration = classExpression;
+                    this.result += "__class(";
+                    if (classExpression.heritageClauses) {
+                        this.writeHeritage(classExpression, tabs, node);
+                    }
+                    else {
+                        this.result += "nil";
+                    }
+                    this.result += ", {\n";
+                    for (var _b = 0, _c = classExpression.members; _b < _c.length; _b++) {
+                        var member = _c[_b];
+                        if (member.kind === ts.SyntaxKind.PropertyDeclaration)
+                            continue;
+                        this.traverse(member, tabs + 1, node);
+                    }
+                    this.result += "})\n";
+                    if (this.classDeclarations.length > 0) {
+                        this.currentClassDeclaration = this.classDeclarations.pop();
+                    }
+                    else {
+                        this.currentClassDeclaration = undefined;
+                    }
+                    break;
                 }
-                break;
             case ts.SyntaxKind.ComputedPropertyName:
                 var computedPropertyName = node;
                 this.result += "[";
@@ -178,23 +252,32 @@ var LuaVisitor = /** @class */ (function () {
             case ts.SyntaxKind.Constructor:
                 {
                     var constr = node;
-                    this.result += "function ";
-                    var parentClassDeclaration_1 = parent;
-                    if (parentClassDeclaration_1.name)
-                        this.traverse(parentClassDeclaration_1.name, tabs, node);
-                    this.result += ":constructor(";
-                    this.writeArray(constr.parameters, tabs, node);
+                    this.writeTabs(tabs);
+                    this.result += "constructor = function(self";
+                    if (constr.parameters.length > 0) {
+                        this.result += ", ";
+                        this.writeArray(constr.parameters, tabs, node);
+                    }
                     this.result += ")\n";
-                    for (var _d = 0, _e = parentClassDeclaration_1.members; _d < _e.length; _d++) {
-                        var member = _e[_d];
-                        if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
-                            this.traverse(member, tabs + 1, node);
+                    if (constr.parent) {
+                        for (var _d = 0, _e = constr.parent.members; _d < _e.length; _d++) {
+                            var member = _e[_d];
+                            if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
+                                this.traverse(member, tabs + 1, node);
+                            }
                         }
                     }
                     if (constr.body)
                         this.traverse(constr.body, tabs + 1, node);
                     this.writeTabs(tabs);
-                    this.result += "end\n";
+                    this.result += "end,\n";
+                    break;
+                }
+            case ts.SyntaxKind.DeleteExpression:
+                {
+                    var deleteExpression = node;
+                    this.traverse(deleteExpression.expression, tabs, node);
+                    this.result += " = nil";
                     break;
                 }
             case ts.SyntaxKind.DoStatement:
@@ -297,20 +380,22 @@ var LuaVisitor = /** @class */ (function () {
                 this.result += "end\n";
                 break;
             case ts.SyntaxKind.FunctionDeclaration:
-                var functionDeclaration = node;
-                this.result += "function ";
-                if (functionDeclaration.name) {
-                    this.traverse(functionDeclaration.name, tabs, node);
+                {
+                    var functionDeclaration = node;
+                    var isExport_2 = this.writeLocalOrExport(functionDeclaration);
+                    if (functionDeclaration.name) {
+                        this.traverse(functionDeclaration.name, tabs, node, { export: isExport_2 });
+                    }
+                    this.result += " = function(";
+                    this.writeArray(functionDeclaration.parameters, tabs, node);
+                    this.result += ")\n";
+                    if (functionDeclaration.body) {
+                        this.traverse(functionDeclaration.body, tabs + 1, node);
+                    }
+                    this.writeTabs(tabs);
+                    this.result += "end";
+                    break;
                 }
-                this.result += "(";
-                this.writeArray(functionDeclaration.parameters, tabs, node);
-                this.result += ")\n";
-                if (functionDeclaration.body) {
-                    this.traverse(functionDeclaration.body, tabs + 1, node);
-                }
-                this.writeTabs(tabs);
-                this.result += "end";
-                break;
             case ts.SyntaxKind.FunctionExpression:
                 var functionExpression = node;
                 this.result += "function(";
@@ -334,7 +419,12 @@ var LuaVisitor = /** @class */ (function () {
                 else if (this.importedVariables[identifier.text]) {
                     this.result += this.importedVariables[identifier.text] + "." + identifier.text;
                 }
+                else if (this.exportedVariables[identifier.text]) {
+                    this.result += "__exports." + identifier.text;
+                }
                 else {
+                    if (options && options.export)
+                        this.exportedVariables[identifier.text] = true;
                     this.result += identifier.text;
                 }
                 break;
@@ -390,10 +480,12 @@ var LuaVisitor = /** @class */ (function () {
                     }
                 }
                 break;
-            // case ts.SyntaxKind.ImportSpecifier:
-            //     const importSpecifier = <ts.ImportSpecifier>node;
-            //     importSpecifier.
-            //     break;
+            case ts.SyntaxKind.IndexSignature:
+                // Not needed, it's an index signature in a class declaration
+                break;
+            case ts.SyntaxKind.InterfaceDeclaration:
+                // Interfaces are skipped
+                break;
             case ts.SyntaxKind.ObjectLiteralExpression:
                 var objectLiteralExpression = node;
                 if (objectLiteralExpression.properties.length > 0) {
@@ -410,19 +502,17 @@ var LuaVisitor = /** @class */ (function () {
             case ts.SyntaxKind.MethodDeclaration:
                 var methodDeclaration = node;
                 this.writeTabs(tabs);
-                this.result += "function ";
-                var parentClassDeclaration = parent;
-                if (parentClassDeclaration.name)
-                    this.traverse(parentClassDeclaration.name, tabs, node);
-                this.result += ":";
                 this.traverse(methodDeclaration.name, tabs, node);
-                this.result += "(";
-                this.writeArray(methodDeclaration.parameters, tabs, node);
+                this.result += " = function(self";
+                if (methodDeclaration.parameters.length > 0) {
+                    this.result += ", ";
+                    this.writeArray(methodDeclaration.parameters, tabs, node);
+                }
                 this.result += ")\n";
                 if (methodDeclaration.body)
                     this.traverse(methodDeclaration.body, tabs + 1, node);
                 this.writeTabs(tabs);
-                this.result += "end\n";
+                this.result += "end,\n";
                 break;
             case ts.SyntaxKind.NewExpression:
                 var newExpression = node;
@@ -509,15 +599,31 @@ var LuaVisitor = /** @class */ (function () {
                 var stringLiteral = node;
                 this.result += '"' + stringLiteral.text.replace("\n", "\\n") + '"';
                 break;
+            case ts.SyntaxKind.SuperKeyword:
+                {
+                    if (!this.currentClassDeclaration) {
+                        this.addTextError(node, "Unexpected super keyword outside of a class declaration");
+                        break;
+                    }
+                    this.writeHeritage(this.currentClassDeclaration, tabs, node);
+                    this.result += ".constructor";
+                    break;
+                }
             case ts.SyntaxKind.ThisKeyword:
                 this.result += "self";
                 break;
             case ts.SyntaxKind.TrueKeyword:
                 this.result += "true";
                 break;
+            case ts.SyntaxKind.TypeAliasDeclaration:
+                // Type alias declaration is not needed
+                break;
+            case ts.SyntaxKind.TypeAssertionExpression:
+                // Cast is not needed
+                break;
             case ts.SyntaxKind.VariableDeclaration:
                 var variableDeclaration = node;
-                this.traverse(variableDeclaration.name, tabs, node);
+                this.traverse(variableDeclaration.name, tabs, node, options);
                 if (variableDeclaration.initializer) {
                     this.result += " = ";
                     this.traverse(variableDeclaration.initializer, tabs, node);
@@ -525,7 +631,7 @@ var LuaVisitor = /** @class */ (function () {
                 break;
             case ts.SyntaxKind.VariableDeclarationList:
                 var variableDeclarationList = node;
-                this.writeArray(variableDeclarationList.declarations, tabs, node);
+                this.writeArray(variableDeclarationList.declarations, tabs, node, ", ", options);
                 break;
             case ts.SyntaxKind.VariableStatement:
                 var variableStatement = node;
@@ -542,8 +648,8 @@ var LuaVisitor = /** @class */ (function () {
                         }
                     }
                 }
-                this.result += "local ";
-                this.traverse(variableStatement.declarationList, tabs, node);
+                var isExport = this.writeLocalOrExport(variableStatement);
+                this.traverse(variableStatement.declarationList, tabs, node, { export: isExport });
                 this.result += "\n";
                 break;
             case ts.SyntaxKind.WhileStatement:
@@ -551,9 +657,17 @@ var LuaVisitor = /** @class */ (function () {
                 this.writeTabs(tabs);
                 this.result += "while ";
                 this.traverse(whileStatement.expression, tabs, node);
-                this.result += "do\n";
+                this.result += " do\n";
                 this.traverse(whileStatement.statement, tabs + 1, node);
+                this.writeTabs(tabs);
                 this.result += "end\n";
+                break;
+            case ts.SyntaxKind.YieldExpression:
+                var yieldExpression = node;
+                this.result += "coroutine.yield(";
+                if (yieldExpression.expression)
+                    this.traverse(yieldExpression.expression, tabs, node);
+                this.result += ")";
                 break;
             default:
                 this.writeTabs(tabs);
@@ -561,6 +675,26 @@ var LuaVisitor = /** @class */ (function () {
                 this.result += "{" + ts.SyntaxKind[node.kind] + "}\n";
                 node.forEachChild(function (x) { return _this.traverse(x, tabs + 1, node); });
                 break;
+        }
+    };
+    LuaVisitor.prototype.writeHeritage = function (classExpression, tabs, node) {
+        if (!classExpression.heritageClauses)
+            return;
+        for (var _i = 0, _a = classExpression.heritageClauses; _i < _a.length; _i++) {
+            var heritage = _a[_i];
+            if (heritage.token === ts.SyntaxKind.ExtendsKeyword) {
+                this.writeArray(heritage.types, tabs, node);
+            }
+        }
+    };
+    LuaVisitor.prototype.writeLocalOrExport = function (node) {
+        if (node.modifiers && node.modifiers.some(function (x) { return x.kind === ts.SyntaxKind.ExportKeyword; })) {
+            this.result += "__exports.";
+            return true;
+        }
+        else {
+            this.result += "local ";
+            return false;
         }
     };
     return LuaVisitor;

@@ -45,7 +45,7 @@ else {
         if (sourceFile.isDeclarationFile || sourceFile.fileName.match(/wow\.ts$/)) continue; // TODO until it's in a package
         const luaVisitor = new LuaVisitor(sourceFile);
         luaVisitor.traverse(sourceFile, 0, undefined);
-        const relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua");
+        const relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua").replace("^[\\/]","");
         const outputPath = path.join(outDir, relativePath);
         if (!fs.existsSync(path.dirname(outputPath))) fs.mkdirSync(path.dirname(outputPath));
         fs.writeFileSync(outputPath, luaVisitor.getResult());
@@ -56,5 +56,5 @@ else {
     }
     fileList += `</Ui>`;
 
-    fs.writeFileSync(path.join(rootPath, "files.xml"), fileList);
+    fs.writeFileSync(path.join(outDir, "files.xml"), fileList);
 }

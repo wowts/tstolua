@@ -46,14 +46,29 @@ end
 });
 
 test(t => {
+    t.is(testTransform(`class Test extends Base {
+        constructor() {
+            super(16);
+        }
+}`), `local Test = __class(Base, {
+    constructor = function()
+        Base.constructor(self, 16)
+    end
+})
+`); 
+});
+
+test(t => {
     t.is(testTransform(`import __addon from "addon";
 let [OVALE, Ovale] = __addon;
 import { OvaleScripts } from "./OvaleScripts";
 let a = OvaleScripts;
 import Test from 'Test';
+export const bla = 3;
 `), `local OVALE, Ovale = ...
 require(OVALE, Ovale, "source", { "./OvaleScripts", "Test" }, function(__exports, __OvaleScripts, Test)
 local a = __OvaleScripts.OvaleScripts
+__exports.bla = 3
 end))
 `);
 });
@@ -88,18 +103,24 @@ test(t => {
         this.a = 4;
     }
 }
-    `), `local Test = __class(Base)
-function Test:constructor(a)
-    self.a = 3
-    self.a = a
-end
-function Test:bla()
-    self.a = 4
-end
+    `), `local Test = __class(Base, {
+    constructor = function(self, a)
+        self.a = 3
+        self.a = a
+    end,
+    bla = function()
+        self.a = 4
+    end,
+})
 `)
 });
 
-
+test(t => {
+    t.is(testTransform(`(a,b) => 18`), `function(a, b)
+    return 18
+end
+`);
+});
 
 test(t => {
     t.is(testTransform(`do {
@@ -109,5 +130,29 @@ test(t => {
     `), `repeat
     a = a + 1
 until not ( not (a > 5))
+`);
+});
+
+
+test(t => {
+    t.is(testTransform(`return class extends Base {
+    value = 3;
+    constructor(...rest:any[]) {
+        super(...rest);
+
+    }
+    getValue() {
+        return this.value;
+    }
+}
+    `), `return __class(Base, {
+    constructor = function(self, ...)
+        self.value = 3
+        Base.constructor(self, ...)
+    end,
+    getValue = function(self)
+        return self.value
+    end,
+})
 `);
 });

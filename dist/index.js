@@ -43,7 +43,7 @@ else {
             continue; // TODO until it's in a package
         var luaVisitor = new luavisitor_1.LuaVisitor(sourceFile);
         luaVisitor.traverse(sourceFile, 0, undefined);
-        var relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua");
+        var relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua").replace("^[\\/]", "");
         var outputPath = path.join(outDir, relativePath);
         if (!fs.existsSync(path.dirname(outputPath)))
             fs.mkdirSync(path.dirname(outputPath));
@@ -55,6 +55,6 @@ else {
         fileList += "   <Script file=\"" + relativePath + "\"/>\n";
     }
     fileList += "</Ui>";
-    fs.writeFileSync(path.join(rootPath, "files.xml"), fileList);
+    fs.writeFileSync(path.join(outDir, "files.xml"), fileList);
 }
 //# sourceMappingURL=index.js.map

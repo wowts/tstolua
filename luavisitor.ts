@@ -1,6 +1,8 @@
 import * as ts from "typescript";
 import * as path from "path";
 
+interface Options { elseIf?: boolean, callee?: boolean, class?: string, export?: boolean }
+
 interface Import {
     module: string;
     variable: string;
@@ -13,6 +15,9 @@ export class LuaVisitor {
     private addonVariable: string;
     private addonModule: string;
     private importedVariables: {[name:string]: string} = {};
+    private exportedVariables: {[name: string]: boolean} = {};
+    private classDeclarations: ts.ClassLikeDeclaration[] = [];
+    private currentClassDeclaration: ts.ClassLikeDeclaration | undefined = undefined;
     public errors:string[] = [];
     
     constructor(private sourceFile: ts.SourceFile)  {}
@@ -45,14 +50,15 @@ ${this.result}`;
         this.errors.push(`${text} in ${this.sourceFile.fileName}:${position.line + 1}:${position.character + 1}`);
     }
 
-    writeArray<T extends ts.Node>(array: ts.NodeArray<T>, tabs: number, parent: ts.Node, separator: string = ", ") {
+    writeArray<T extends ts.Node>(array: ts.NodeArray<T>, tabs: number, parent: ts.Node, separator: string = ", ", options?: Options) {
         for(let i = 0; i<array.length; i++) {
             if(i> 0) this.result += separator;
-            this.traverse(array[i], tabs, parent);
+            this.traverse(array[i], tabs, parent, options);
         }
     }
 
-    public traverse(node: ts.Node, tabs: number, parent: ts.Node | undefined, options?: { elseIf?: boolean, callee?: boolean, class?: string }) {
+    public traverse(node: ts.Node, tabs: number, parent: ts.Node | undefined, options?: Options) {
+        node.parent = parent;
         switch (node.kind) {
             case ts.SyntaxKind.ArrayBindingPattern:
                 const arrayBindingPattern = <ts.ArrayBindingPattern>node;
@@ -61,6 +67,24 @@ ${this.result}`;
             case ts.SyntaxKind.ArrayLiteralExpression:
                 const arrayLiteralExpression = <ts.ArrayLiteralExpression>node;
                 this.writeArray(arrayLiteralExpression.elements, tabs, node);
+                break;
+            case ts.SyntaxKind.ArrowFunction:
+                const arrowFunction = <ts.ArrowFunction>node;
+                this.result += "function(";
+                this.writeArray(arrowFunction.parameters, tabs, node);
+                this.result += ")\n";
+                if (arrowFunction.body.kind === ts.SyntaxKind.Block) {
+                    this.traverse(arrowFunction.body, tabs + 1, node);
+                }
+                else {
+                    this.writeTabs(tabs + 1);
+                    this.result += "return ";
+                    this.traverse(arrowFunction.body, tabs, node);
+                    this.result += "\n";
+                }
+                 
+                this.writeTabs(tabs);
+                this.result += "end";                
                 break;
             case ts.SyntaxKind.BinaryExpression:
                 const binary = <ts.BinaryExpression>node;
@@ -81,10 +105,12 @@ ${this.result}`;
                     case ts.SyntaxKind.EqualsToken:
                         this.result += " = ";
                         break;
+                    case ts.SyntaxKind.EqualsEqualsEqualsToken:
                     case ts.SyntaxKind.EqualsEqualsToken:
                         this.result += " == ";
                         break;
                     case ts.SyntaxKind.ExclamationEqualsToken:
+                    case ts.SyntaxKind.ExclamationEqualsEqualsToken:
                         this.result += " ~= ";
                         break;
                     case ts.SyntaxKind.GreaterThanToken:
@@ -148,33 +174,84 @@ ${this.result}`;
                 else {
                     this.traverse(callExpression.expression, tabs, node, { callee: true });
                     this.result += "(";
+                    if (callExpression.expression.kind === ts.SyntaxKind.SuperKeyword ) {
+                        this.result += "self";
+                        if (callExpression.arguments.length) this.result += ", ";
+                    }
                     this.writeArray(callExpression.arguments, tabs, node);
                     this.result += ")";
                 }
                 break;
             case ts.SyntaxKind.ClassDeclaration:
-                const classExpression = <ts.ClassDeclaration>node;
-                let className: string|undefined = undefined;
-                if (classExpression.name) {
-                    this.result += "local ";
-                    this.traverse(classExpression.name, tabs, node);
-                    className = classExpression.name.text;
-                    this.result += " = ";
-                }
-                this.result += "__class(";
-                if (classExpression.heritageClauses) {
-                    for (const heritage of classExpression.heritageClauses) {
-                        if (heritage.token === ts.SyntaxKind.ExtendsKeyword) {
-                            this.writeArray(heritage.types, tabs, node);
-                        }
+                {
+
+                    const classExpression = <ts.ClassDeclaration>node;
+                    if (this.currentClassDeclaration) {
+                        this.classDeclarations.push(this.currentClassDeclaration);
                     }
+                    this.currentClassDeclaration = classExpression;
+                    let className: string|undefined = undefined;
+                    let isExport:boolean = false;
+                    if (classExpression.name) {
+                        isExport = this.writeLocalOrExport(classExpression);
+                        this.traverse(classExpression.name, tabs, node);
+                        className = classExpression.name.text;
+                        this.result += " = ";
+                    }
+                    this.result += "__class(";
+                    if (classExpression.heritageClauses) {
+                        this.writeHeritage(classExpression, tabs, node);
+                    }
+                    else {
+                        this.result += "nil";
+                    }
+                    this.result += ", ";
+                    for (const member of classExpression.members) {
+                        if (member.kind === ts.SyntaxKind.PropertyDeclaration) continue;
+                        this.traverse(member, tabs, node, { class: className });
+                    }
+                    if (this.classDeclarations.length > 0) {
+                        this.currentClassDeclaration = this.classDeclarations.pop();
+                    }
+                    else {
+                        this.currentClassDeclaration = undefined;
+                    }                
+                    this.result += ")\n";
+                    if (isExport) {
+                        this.writeTabs(tabs);
+                        this.result += `local ${className} = __exports.${className}\n`;
+                    }
+                    
+                    break;
                 }
-                this.result += ")\n";
-                for (const member of classExpression.members) {
-                    if (member.kind === ts.SyntaxKind.PropertyDeclaration) continue;
-                    this.traverse(member, tabs, node, { class: className });
+            case ts.SyntaxKind.ClassExpression: 
+                {
+                    const classExpression = <ts.ClassExpression>node;
+                    if (this.currentClassDeclaration) {
+                        this.classDeclarations.push(this.currentClassDeclaration);
+                    }
+                    this.currentClassDeclaration = classExpression;
+                    this.result += "__class(";
+                    if (classExpression.heritageClauses) {
+                        this.writeHeritage(classExpression, tabs, node);
+                    }
+                    else {
+                        this.result += "nil";
+                    }
+                    this.result += ", {\n";
+                    for (const member of classExpression.members) {
+                        if (member.kind === ts.SyntaxKind.PropertyDeclaration) continue;
+                        this.traverse(member, tabs + 1, node);
+                    }
+                    this.result += "})\n";
+                    if (this.classDeclarations.length > 0) {
+                        this.currentClassDeclaration = this.classDeclarations.pop();
+                    }
+                    else {
+                        this.currentClassDeclaration = undefined;
+                    }   
+                    break;
                 }
-                break;
             case ts.SyntaxKind.ComputedPropertyName:
                 const computedPropertyName = <ts.ComputedPropertyName>node;
                 this.result += "[";
@@ -184,20 +261,30 @@ ${this.result}`;
             case ts.SyntaxKind.Constructor:
                 {
                     const constr = <ts.ConstructorDeclaration>node;
-                    this.result += "function ";
-                    const parentClassDeclaration = <ts.ClassDeclaration>parent;
-                    if (parentClassDeclaration.name) this.traverse(parentClassDeclaration.name, tabs, node);
-                    this.result += ":constructor(";
-                    this.writeArray(constr.parameters, tabs, node);
+                    this.writeTabs(tabs);
+                    this.result += "constructor = function(self";
+                    if (constr.parameters.length > 0) {
+                        this.result += ", ";
+                        this.writeArray(constr.parameters, tabs, node);
+                    }
                     this.result += ")\n"
-                    for (const member of parentClassDeclaration.members) {
-                        if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
-                            this.traverse(member, tabs + 1, node);
+                    if (constr.parent) {
+                        for (const member of constr.parent.members) {
+                            if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
+                                this.traverse(member, tabs + 1, node);
+                            }
                         }
                     }
                     if (constr.body) this.traverse(constr.body, tabs + 1, node);
                     this.writeTabs(tabs);
-                    this.result += "end\n";
+                    this.result += "end,\n";
+                    break;
+                }
+            case ts.SyntaxKind.DeleteExpression:
+                {
+                    const deleteExpression = <ts.DeleteExpression>node;
+                    this.traverse(deleteExpression.expression, tabs, node);
+                    this.result += " = nil";
                     break;
                 }
             case ts.SyntaxKind.DoStatement:
@@ -308,20 +395,22 @@ ${this.result}`;
                 this.result += "end\n";
                 break;
             case ts.SyntaxKind.FunctionDeclaration:
-                const functionDeclaration = <ts.FunctionDeclaration>node;
-                this.result += "function ";
-                if (functionDeclaration.name) {
-                    this.traverse(functionDeclaration.name, tabs, node);
+                {
+                    const functionDeclaration = <ts.FunctionDeclaration>node;
+                    const isExport = this.writeLocalOrExport(functionDeclaration);
+                    if (functionDeclaration.name) {
+                        this.traverse(functionDeclaration.name, tabs, node, { export: isExport });
+                    }
+                    this.result += " = function(";
+                    this.writeArray(functionDeclaration.parameters, tabs, node);
+                    this.result += ")\n";
+                    if (functionDeclaration.body) {
+                        this.traverse(functionDeclaration.body, tabs + 1, node);
+                    }
+                    this.writeTabs(tabs);
+                    this.result += "end";
+                    break;
                 }
-                this.result += "(";
-                this.writeArray(functionDeclaration.parameters, tabs, node);
-                this.result += ")\n";
-                if (functionDeclaration.body) {
-                    this.traverse(functionDeclaration.body, tabs + 1, node);
-                }
-                this.writeTabs(tabs);
-                this.result += "end";
-                break;
             case ts.SyntaxKind.FunctionExpression:
                 const functionExpression = <ts.FunctionExpression>node;
                 this.result += "function(";
@@ -345,7 +434,11 @@ ${this.result}`;
                 else if (this.importedVariables[identifier.text]) {
                     this.result += this.importedVariables[identifier.text] + "." + identifier.text;
                 }
+                else if (this.exportedVariables[identifier.text]) {
+                    this.result += "__exports." + identifier.text;
+                }
                 else {
+                    if (options && options.export) this.exportedVariables[identifier.text] = true;
                     this.result += identifier.text;
                 }
                 break;
@@ -399,10 +492,12 @@ ${this.result}`;
                     }
                 }
                 break;
-            // case ts.SyntaxKind.ImportSpecifier:
-            //     const importSpecifier = <ts.ImportSpecifier>node;
-            //     importSpecifier.
-            //     break;
+            case ts.SyntaxKind.IndexSignature:
+                // Not needed, it's an index signature in a class declaration
+                break;
+            case ts.SyntaxKind.InterfaceDeclaration:
+                // Interfaces are skipped
+                break;
             case ts.SyntaxKind.ObjectLiteralExpression:
                 const objectLiteralExpression = <ts.ObjectLiteralExpression>node;
                 if (objectLiteralExpression.properties.length > 0) {
@@ -419,17 +514,16 @@ ${this.result}`;
             case ts.SyntaxKind.MethodDeclaration:
                 const methodDeclaration = <ts.MethodDeclaration>node;
                 this.writeTabs(tabs);
-                this.result += "function ";
-                const parentClassDeclaration = <ts.ClassDeclaration>parent;
-                if (parentClassDeclaration.name) this.traverse(parentClassDeclaration.name, tabs, node);
-                this.result += ":";
                 this.traverse(methodDeclaration.name, tabs, node);
-                this.result += "(";
-                this.writeArray(methodDeclaration.parameters, tabs, node);
+                this.result += " = function(self";
+                if (methodDeclaration.parameters.length > 0) {
+                    this.result += ", ";
+                    this.writeArray(methodDeclaration.parameters, tabs, node);                    
+                }
                 this.result += ")\n";
                 if (methodDeclaration.body) this.traverse(methodDeclaration.body, tabs + 1, node);
                 this.writeTabs(tabs);
-                this.result += "end\n";
+                this.result += "end,\n";
                 break;
 
             case ts.SyntaxKind.NewExpression:
@@ -516,15 +610,31 @@ ${this.result}`;
                 const stringLiteral = <ts.StringLiteral>node;
                 this.result += '"' + stringLiteral.text.replace("\n", "\\n") + '"';
                 break;
+            case ts.SyntaxKind.SuperKeyword:
+                {
+                    if (!this.currentClassDeclaration) {
+                        this.addTextError(node, "Unexpected super keyword outside of a class declaration");
+                        break;
+                    } 
+                    this.writeHeritage(this.currentClassDeclaration, tabs, node);
+                    this.result += ".constructor";
+                    break;
+                }
             case ts.SyntaxKind.ThisKeyword:
                 this.result += "self";
                 break;
             case ts.SyntaxKind.TrueKeyword:
                 this.result += "true";
                 break;
+            case ts.SyntaxKind.TypeAliasDeclaration:
+                // Type alias declaration is not needed
+                break;
+            case ts.SyntaxKind.TypeAssertionExpression:
+                // Cast is not needed
+                break;
             case ts.SyntaxKind.VariableDeclaration:
                 const variableDeclaration = <ts.VariableDeclaration>node;
-                this.traverse(variableDeclaration.name, tabs, node);
+                this.traverse(variableDeclaration.name, tabs, node, options);
                 
                 if (variableDeclaration.initializer) {
                     this.result += " = ";
@@ -533,7 +643,7 @@ ${this.result}`;
                 break;
             case ts.SyntaxKind.VariableDeclarationList:
                 const variableDeclarationList = <ts.VariableDeclarationList>node;
-                this.writeArray(variableDeclarationList.declarations, tabs, node);
+                this.writeArray(variableDeclarationList.declarations, tabs, node, ", ", options);
                 break;
             case ts.SyntaxKind.VariableStatement:
                 const variableStatement = <ts.VariableStatement>node;
@@ -551,9 +661,10 @@ ${this.result}`;
                         }
                     }                    
                 }
+                
+                const isExport = this.writeLocalOrExport(variableStatement);
 
-                this.result += "local ";
-                this.traverse(variableStatement.declarationList, tabs, node);
+                this.traverse(variableStatement.declarationList, tabs, node, { export: isExport });
                 this.result += "\n";
                 break;
             case ts.SyntaxKind.WhileStatement:
@@ -561,9 +672,16 @@ ${this.result}`;
                 this.writeTabs(tabs);
                 this.result += "while ";
                 this.traverse(whileStatement.expression, tabs, node);
-                this.result += "do\n";
+                this.result += " do\n";
                 this.traverse(whileStatement.statement, tabs + 1, node);
+                this.writeTabs(tabs);
                 this.result += "end\n";
+                break;
+            case ts.SyntaxKind.YieldExpression:
+                const yieldExpression = <ts.YieldExpression>node;
+                this.result += "coroutine.yield(";
+                if (yieldExpression.expression) this.traverse(yieldExpression.expression, tabs, node);
+                this.result += ")";
                 break;
             default:
                 this.writeTabs(tabs);
@@ -571,6 +689,26 @@ ${this.result}`;
                 this.result += "{" + ts.SyntaxKind[node.kind] + "}\n";
                 node.forEachChild(x => this.traverse(x, tabs + 1, node));
                 break;
+        }
+    }
+
+    private writeHeritage(classExpression: ts.ClassDeclaration | ts.ClassExpression, tabs: number, node: ts.Node) {
+        if (!classExpression.heritageClauses) return;
+        for(const heritage of classExpression.heritageClauses) {
+            if(heritage.token === ts.SyntaxKind.ExtendsKeyword) {
+            this.writeArray(heritage.types, tabs, node);
+            }
+        }
+    }
+
+    private writeLocalOrExport(node: ts.Node) {
+        if(node.modifiers && node.modifiers.some(x => x.kind === ts.SyntaxKind.ExportKeyword)) {
+            this.result += "__exports.";
+            return true;
+        }
+        else {
+            this.result += "local ";
+            return false;
         }
     }
 }
