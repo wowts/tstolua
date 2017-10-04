@@ -1,7 +1,10 @@
 {
   "name": "tstolua",
   "version": "1.0.0",
-  "main": "dist/index.js",
+  "main": "./dist/index.js",
+  "bin": {
+    "tstuloa": "./bin/tstolua"
+  },
   "license": "MIT",
   "author": {
     "name": "Sidoine De Wispelaere"
@@ -18,7 +21,7 @@
     "ava": "^0.22.0"
   },
   "dependencies": {
-    "typescript": "^2.5.2"
+    "typescript": "^2.5.3"
   },
   "repository": {
     "url": "https://github.com/Sidoine/tstolua"

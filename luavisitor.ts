@@ -18,9 +18,17 @@ export class LuaVisitor {
     private exportedVariables: {[name: string]: boolean} = {};
     private classDeclarations: ts.ClassLikeDeclaration[] = [];
     private currentClassDeclaration: ts.ClassLikeDeclaration | undefined = undefined;
+    private exports:ts.Symbol[] = [];
     public errors:string[] = [];
     
-    constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker)  {}
+    constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker)  {
+        if (typeChecker) {
+            const currentModule = typeChecker.getSymbolAtLocation(sourceFile);
+            if (currentModule) {
+                this.exports = typeChecker.getExportsOfModule(currentModule);
+            }
+        }
+    }
 
     getResult() {
         let hasExportedVariables = this.imports.length > 0;
@@ -31,13 +39,16 @@ export class LuaVisitor {
         if (hasExportedVariables) {
             if (!this.addonNameVariable) this.addonNameVariable = "__addonName";
             if (!this.addonVariable) this.addonVariable = "__addon";
+            // const moduleName = path.basename(this.sourceFile.fileName, ".ts");
+            const moduleName = this.sourceFile.moduleName;
+            const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
             if (this.imports.length > 0) {
-                this.result = `${this.addonVariable}.require(${this.addonNameVariable}, ${this.addonVariable}, "${path.basename(this.sourceFile.fileName, ".ts")}", { "${this.imports.map(x => x.module).join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
+                this.result = `${this.addonVariable}.require(${this.addonNameVariable}, ${this.addonVariable}, "${moduleName}", { "${modules.join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
 ${this.result}end)
 `;
             }
             else {
-                this.result = `${this.addonVariable}.require(${this.addonNameVariable}, ${this.addonVariable}, "${path.basename(this.sourceFile.fileName, ".ts")}", {}, function(__exports)
+                this.result = `${this.addonVariable}.require(${this.addonNameVariable}, ${this.addonVariable}, "${moduleName}", {}, function(__exports)
 ${this.result}end)
 `;
             }
@@ -446,13 +457,13 @@ ${this.result}`;
                 else if (this.importedVariables[identifier.text]) {
                     this.result += this.importedVariables[identifier.text] + "." + identifier.text;
                 }
-                else if (this.exportedVariables[identifier.text]) {
-                    this.result += "__exports." + identifier.text;
-                }
+                // else if (this.exportedVariables[identifier.text]) {
+                //     this.result += "__exports." + identifier.text;
+                // }
                 else {
                     if (this.typeChecker) {
                         const symbol = this.typeChecker.getSymbolAtLocation(node);
-                        if (symbol && (symbol.flags & ts.SymbolFlags.HasExports)) {
+                        if (symbol && this.exports.indexOf(symbol) >= 0) {
                             this.result += "__exports.";
                         }
                     }
@@ -753,7 +764,6 @@ ${this.result}`;
 
     private writeLocalOrExport(node: ts.Node) {
         if(this.hasExportModifier(node)) {
-            this.result += "__exports.";
             return true;
         }
         else {

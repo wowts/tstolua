@@ -1,16 +1,23 @@
 import { test } from "ava";
 import * as ts from "typescript";
 import { LuaVisitor } from "../luavisitor";
+import * as fs from "fs";
+
+let i = 0;
+if (!fs.existsSync("testfiles")) fs.mkdirSync("testfiles");
 
 function testTransform(source: string) {
-    // const program = ts.createProgram(["source.ts"], { module: ts.ModuleKind.CommonJS, emitDecoratorMetadata: false });
-    // let sourceFile = program.getSourceFile("source.ts");
-    // sourceFile = sourceFile.update(source, { newLength: source.length, span: { start: 0, length: sourceFile.getFullText().length } });
-    // sourceFile.moduleName = "source";
-    const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, false);
-    // sourceFile.update
-    const visitor = new LuaVisitor(sourceFile, undefined);
+    const dir = "testfiles/test" + (i++);
+    const fileName = dir + "\\source.ts";
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+    fs.writeFileSync(fileName, source);
+    const program = ts.createProgram([fileName], { module: ts.ModuleKind.CommonJS, emitDecoratorMetadata: false });
+    let sourceFile = program.getSourceFile(fileName);
+    //const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, false);
+    // TODO how to create the type checker without the program or how to create a program from a source file?
+    const visitor = new LuaVisitor(sourceFile, program.getTypeChecker());
     visitor.traverse(sourceFile, 0, undefined);
+    fs.unlinkSync(fileName);
     return visitor.getResult();
 }
 
@@ -178,7 +185,7 @@ test(t => {
     t.is(testTransform("`${'3'}${3}"), "\"3\" .. 3\n");
 });
 
-test.only(t => {
+test(t => {
     t.is(testTransform(`function a(){
     return new Test();
 }

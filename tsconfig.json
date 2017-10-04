@@ -6,5 +6,9 @@
     "outDir": "./dist",                        /* Redirect output structure to the directory. */
     "strict": true,                            /* Enable all strict type-checking options. */
     "sourceMap": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "testfiles"
+  ]
 }

@@ -12,7 +12,14 @@ var LuaVisitor = /** @class */ (function () {
         this.exportedVariables = {};
         this.classDeclarations = [];
         this.currentClassDeclaration = undefined;
+        this.exports = [];
         this.errors = [];
+        if (typeChecker) {
+            var currentModule = typeChecker.getSymbolAtLocation(sourceFile);
+            if (currentModule) {
+                this.exports = typeChecker.getExportsOfModule(currentModule);
+            }
+        }
     }
     LuaVisitor.prototype.getResult = function () {
         var hasExportedVariables = this.imports.length > 0;
@@ -25,11 +32,14 @@ var LuaVisitor = /** @class */ (function () {
                 this.addonNameVariable = "__addonName";
             if (!this.addonVariable)
                 this.addonVariable = "__addon";
+            // const moduleName = path.basename(this.sourceFile.fileName, ".ts");
+            var moduleName_1 = this.sourceFile.moduleName;
+            var modules = this.imports.map(function (x) { return (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName_1), x.module).replace("\\", "/"); });
             if (this.imports.length > 0) {
-                this.result = this.addonVariable + ".require(" + this.addonNameVariable + ", " + this.addonVariable + ", \"" + path.basename(this.sourceFile.fileName, ".ts") + "\", { \"" + this.imports.map(function (x) { return x.module; }).join("\", \"") + "\" }, function(__exports, " + this.imports.map(function (x) { return x.variable; }).join(", ") + ")\n" + this.result + "end)\n";
+                this.result = this.addonVariable + ".require(" + this.addonNameVariable + ", " + this.addonVariable + ", \"" + moduleName_1 + "\", { \"" + modules.join("\", \"") + "\" }, function(__exports, " + this.imports.map(function (x) { return x.variable; }).join(", ") + ")\n" + this.result + "end)\n";
             }
             else {
-                this.result = this.addonVariable + ".require(" + this.addonNameVariable + ", " + this.addonVariable + ", \"" + path.basename(this.sourceFile.fileName, ".ts") + "\", {}, function(__exports)\n" + this.result + "end)\n";
+                this.result = this.addonVariable + ".require(" + this.addonNameVariable + ", " + this.addonVariable + ", \"" + moduleName_1 + "\", {}, function(__exports)\n" + this.result + "end)\n";
             }
         }
         if (this.addonNameVariable != undefined) {
@@ -431,13 +441,10 @@ var LuaVisitor = /** @class */ (function () {
                 else if (this.importedVariables[identifier.text]) {
                     this.result += this.importedVariables[identifier.text] + "." + identifier.text;
                 }
-                else if (this.exportedVariables[identifier.text]) {
-                    this.result += "__exports." + identifier.text;
-                }
                 else {
                     if (this.typeChecker) {
                         var symbol = this.typeChecker.getSymbolAtLocation(node);
-                        if (symbol && (symbol.flags & ts.SymbolFlags.HasExports)) {
+                        if (symbol && this.exports.indexOf(symbol) >= 0) {
                             this.result += "__exports.";
                         }
                     }
@@ -740,7 +747,6 @@ var LuaVisitor = /** @class */ (function () {
     };
     LuaVisitor.prototype.writeLocalOrExport = function (node) {
         if (this.hasExportModifier(node)) {
-            this.result += "__exports.";
             return true;
         }
         else {
