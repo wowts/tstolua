@@ -4,8 +4,13 @@ var ava_1 = require("ava");
 var ts = require("typescript");
 var luavisitor_1 = require("../luavisitor");
 function testTransform(source) {
-    var sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, true);
-    var visitor = new luavisitor_1.LuaVisitor(sourceFile);
+    // const program = ts.createProgram(["source.ts"], { module: ts.ModuleKind.CommonJS, emitDecoratorMetadata: false });
+    // let sourceFile = program.getSourceFile("source.ts");
+    // sourceFile = sourceFile.update(source, { newLength: source.length, span: { start: 0, length: sourceFile.getFullText().length } });
+    // sourceFile.moduleName = "source";
+    var sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, false);
+    // sourceFile.update
+    var visitor = new luavisitor_1.LuaVisitor(sourceFile, undefined);
     visitor.traverse(sourceFile, 0, undefined);
     return visitor.getResult();
 }
@@ -50,5 +55,8 @@ ava_1.test(function (t) {
 });
 ava_1.test(function (t) {
     t.is(testTransform("`${'3'}${3}"), "\"3\" .. 3\n");
+});
+ava_1.test.only(function (t) {
+    t.is(testTransform("function a(){\n    return new Test();\n}\nexport class Test {}\n"), "local __addonName, __addon = ...\n__addon.require(__addonName, __addon, \"source\", {}, function(__exports)\nlocal a = function()\n    return __exports.Test()\nend\n__exports.Test = __class(nil, {\n})\nend)\n");
 });
 //# sourceMappingURL=luavisitor.spec.js.map

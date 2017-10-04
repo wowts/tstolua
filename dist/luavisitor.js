@@ -3,8 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var ts = require("typescript");
 var path = require("path");
 var LuaVisitor = /** @class */ (function () {
-    function LuaVisitor(sourceFile) {
+    function LuaVisitor(sourceFile, typeChecker) {
         this.sourceFile = sourceFile;
+        this.typeChecker = typeChecker;
         this.result = "";
         this.imports = [];
         this.importedVariables = {};
@@ -434,6 +435,12 @@ var LuaVisitor = /** @class */ (function () {
                     this.result += "__exports." + identifier.text;
                 }
                 else {
+                    if (this.typeChecker) {
+                        var symbol = this.typeChecker.getSymbolAtLocation(node);
+                        if (symbol && (symbol.flags & ts.SymbolFlags.HasExports)) {
+                            this.result += "__exports.";
+                        }
+                    }
                     if (options && options.export)
                         this.exportedVariables[identifier.text] = true;
                     this.result += identifier.text;

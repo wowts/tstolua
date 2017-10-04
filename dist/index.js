@@ -15,7 +15,7 @@ function reportDiagnostics(diagnostics) {
         console.error(message);
     });
 }
-var configFileName = path.resolve(process.argv[2] || "..\\ovale-ts\\tsconfig.json");
+var configFileName = path.resolve(process.argv[2] || "C:\\Program Files (x86)\\World of Warcraft\\Interface\\AddOns\\Ovale\\tsconfig.json");
 var configJson = fs.readFileSync(configFileName).toString();
 var config = ts.parseConfigFileTextToJson(configFileName, configJson);
 if (config.error) {
@@ -37,11 +37,12 @@ if (!outDir) {
 }
 else {
     var fileList = "<Ui xmlns=\"http://www.blizzard.com/wow/ui/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.blizzard.com/wow/ui/ ..\\FrameXML\\UI.xsd\">\n";
+    var checker = program.getTypeChecker();
     for (var _i = 0, _a = program.getSourceFiles(); _i < _a.length; _i++) {
         var sourceFile = _a[_i];
         if (sourceFile.isDeclarationFile || sourceFile.fileName.match(/wow\.ts$/))
             continue; // TODO until it's in a package
-        var luaVisitor = new luavisitor_1.LuaVisitor(sourceFile);
+        var luaVisitor = new luavisitor_1.LuaVisitor(sourceFile, checker);
         luaVisitor.traverse(sourceFile, 0, undefined);
         var relativePath = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/\.ts$/, ".lua").replace(/^[\\/]/, "");
         var outputPath = path.join(outDir, relativePath);

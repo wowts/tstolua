@@ -3,8 +3,13 @@ import * as ts from "typescript";
 import { LuaVisitor } from "../luavisitor";
 
 function testTransform(source: string) {
-    const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, true);
-    const visitor = new LuaVisitor(sourceFile);
+    // const program = ts.createProgram(["source.ts"], { module: ts.ModuleKind.CommonJS, emitDecoratorMetadata: false });
+    // let sourceFile = program.getSourceFile("source.ts");
+    // sourceFile = sourceFile.update(source, { newLength: source.length, span: { start: 0, length: sourceFile.getFullText().length } });
+    // sourceFile.moduleName = "source";
+    const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, false);
+    // sourceFile.update
+    const visitor = new LuaVisitor(sourceFile, undefined);
     visitor.traverse(sourceFile, 0, undefined);
     return visitor.getResult();
 }
@@ -171,4 +176,20 @@ test(t => {
 
 test(t => {
     t.is(testTransform("`${'3'}${3}"), "\"3\" .. 3\n");
+});
+
+test.only(t => {
+    t.is(testTransform(`function a(){
+    return new Test();
+}
+export class Test {}
+`), `local __addonName, __addon = ...
+__addon.require(__addonName, __addon, "source", {}, function(__exports)
+local a = function()
+    return __exports.Test()
+end
+__exports.Test = __class(nil, {
+})
+end)
+`);
 });

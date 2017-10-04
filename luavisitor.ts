@@ -20,7 +20,7 @@ export class LuaVisitor {
     private currentClassDeclaration: ts.ClassLikeDeclaration | undefined = undefined;
     public errors:string[] = [];
     
-    constructor(private sourceFile: ts.SourceFile)  {}
+    constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker)  {}
 
     getResult() {
         let hasExportedVariables = this.imports.length > 0;
@@ -450,6 +450,12 @@ ${this.result}`;
                     this.result += "__exports." + identifier.text;
                 }
                 else {
+                    if (this.typeChecker) {
+                        const symbol = this.typeChecker.getSymbolAtLocation(node);
+                        if (symbol && (symbol.flags & ts.SymbolFlags.HasExports)) {
+                            this.result += "__exports.";
+                        }
+                    }
                     if (options && options.export) this.exportedVariables[identifier.text] = true;
                     this.result += identifier.text;
                 }
