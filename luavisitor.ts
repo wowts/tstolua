@@ -229,9 +229,29 @@ ${this.result}`;
                         this.result += "nil";
                     }
                     this.result += ", {\n";
+                    let constructorFound = false;
+                    let propertyFound = false;
                     for (const member of classExpression.members) {
-                        if (member.kind === ts.SyntaxKind.PropertyDeclaration) continue;
-                        this.traverse(member, tabs + 1, node, { class: className });
+                        if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
+                            if ((<ts.PropertyDeclaration>member).initializer != undefined) propertyFound = true;
+                            continue;
+                        }
+                        if (member.kind === ts.SyntaxKind.Constructor) {
+                            constructorFound = true;
+                        }
+                        this.traverse(member, tabs + 1, node);
+                    }
+                    if (propertyFound && !constructorFound) {
+                        this.writeTabs(tabs + 1);
+                        this.result += "constructor = function(self)\n"
+                        for (const member of classExpression.members) {
+                            if (member.kind !== ts.SyntaxKind.PropertyDeclaration) {
+                                if ((<ts.PropertyDeclaration>member).initializer === undefined) continue;
+                            }
+                            this.traverse(member, tabs + 2, node);
+                        }
+                        this.writeTabs(tabs + 1);
+                        this.result += "end\n"
                     }
                     if (this.classDeclarations.length > 0) {
                         this.currentClassDeclaration = this.classDeclarations.pop();
@@ -258,6 +278,7 @@ ${this.result}`;
                         this.result += "nil";
                     }
                     this.result += ", {\n";
+                    
                     for (const member of classExpression.members) {
                         if (member.kind === ts.SyntaxKind.PropertyDeclaration) continue;
                         this.traverse(member, tabs + 1, node);
@@ -291,7 +312,7 @@ ${this.result}`;
                     if (constr.parent) {
                         for (const member of constr.parent.members) {
                             if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
-                                this.traverse(member, tabs + 1, node);
+                                this.traverse(member, tabs + 1, constr.parent);
                             }
                         }
                     }
@@ -454,17 +475,23 @@ ${this.result}`;
                 else if (identifier.text === this.addonModule) {
                     this.result += "...";
                 }
-                else if (this.importedVariables[identifier.text]) {
-                    this.result += this.importedVariables[identifier.text] + "." + identifier.text;
-                }
+                // else if (this.importedVariables[identifier.text]) {
+                //     this.result += this.importedVariables[identifier.text] + "." + identifier.text;
+                // }
                 // else if (this.exportedVariables[identifier.text]) {
                 //     this.result += "__exports." + identifier.text;
                 // }
                 else {
                     if (this.typeChecker) {
                         const symbol = this.typeChecker.getSymbolAtLocation(node);
-                        if (symbol && this.exports.indexOf(symbol) >= 0) {
-                            this.result += "__exports.";
+                        if (symbol) {
+                            if (this.exports.indexOf(symbol) >= 0) {
+                                this.result += "__exports.";
+                            }
+                            this.typeChecker.getRootSymbols(symbol)
+                            if ((symbol.flags & ts.SymbolFlags.AliasExcludes) && this.importedVariables[identifier.text]) {
+                                this.result += this.importedVariables[identifier.text] + ".";
+                            }
                         }
                     }
                     if (options && options.export) this.exportedVariables[identifier.text] = true;
@@ -589,16 +616,27 @@ ${this.result}`;
                 this.traverse(prefixUnaryExpression.operand, tabs, node);
                 break;
             case ts.SyntaxKind.PropertyAccessExpression:
-                const access = <ts.PropertyAccessExpression>node;
-                this.traverse(access.expression, tabs, node);
-                if (options && options.callee) {
-                    this.result += ":";
+                {
+                    const access = <ts.PropertyAccessExpression>node;
+                    this.traverse(access.expression, tabs, node);
+
+                    let isMethodCall = false;
+                    if (options && options.callee) {
+                        // const symbol = this.typeChecker.getSymbolAtLocation(access.expression);
+                        // if (symbol) {
+                        //     const typeOfSymbol = this.typeChecker.getTypeOfSymbolAtLocation(symbol, access.expression);
+                        //     const property = typeOfSymbol.getProperty(access.name.text);
+                        //     if (property && (property.flags & ts.SymbolFlags.Method)) {
+                        //         isMethodCall = true;
+                        //     }
+                        // }
+                        const symbol = this.typeChecker.getSymbolAtLocation(access);
+                        if (symbol !== undefined) isMethodCall = (symbol.getFlags() & ts.SymbolFlags.Method) > 0;
+                    }
+                    this.result += isMethodCall ? ":" : ".";
+                    this.result += access.name.text;
+                    break;
                 }
-                else {
-                    this.result += "." ;
-                }
-                this.result += access.name.text;
-                break;
             case ts.SyntaxKind.PropertyAssignment:
                 const propertyAssignment = <ts.PropertyAssignment>node;
                 this.writeTabs(tabs);
@@ -621,7 +659,7 @@ ${this.result}`;
                         this.result += "self.";
                         this.traverse(propertyDeclaration.name, tabs, node);
                         this.result += " = ";
-                        this.traverse(propertyDeclaration.initializer, tabs + 1, node);
+                        this.traverse(propertyDeclaration.initializer, tabs, node);
                         this.result += "\n";
                     }
                     break;
@@ -660,7 +698,18 @@ ${this.result}`;
                 {
                     const templateExpression = <ts.TemplateExpression>node;
                     // for (const templateSpan of templateExpression.templateSpans) {
+                    if (templateExpression.head) {
+                        this.traverse(templateExpression.head, tabs, node);
+                        if (templateExpression.templateSpans.length > 0)
+                            this.result += " .. ";
+                    }
                     this.writeArray(templateExpression.templateSpans, tabs, node, " .. ");
+                    break;
+                }
+            case ts.SyntaxKind.TemplateHead:
+                {
+                    const templateHead = <ts.TemplateHead>node;
+                    this.result += '"' + templateHead.text.replace("\n", "\\n").replace("\r", "\\r").replace("\"", "\\\"") + '"';
                     break;
                 }
             case ts.SyntaxKind.TemplateSpan:

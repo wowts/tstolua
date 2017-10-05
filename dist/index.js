@@ -15,7 +15,8 @@ function reportDiagnostics(diagnostics) {
         console.error(message);
     });
 }
-var configFileName = path.resolve(process.argv[2] || "d:/Applications/World of Warcraft/Interface/AddOns/Ovale/tsconfig.json"); // "C:\\Program Files (x86)\\World of Warcraft\\Interface\\AddOns\\Ovale\\tsconfig.json");
+var configFileName = path.resolve(process.argv[2] || "C:\\Program Files (x86)\\World of Warcraft\\Interface\\AddOns\\Ovale\\tsconfig.json");
+// "d:/Applications/World of Warcraft/Interface/AddOns/Ovale/tsconfig.json"); 
 var configJson = fs.readFileSync(configFileName).toString();
 var config = ts.parseConfigFileTextToJson(configFileName, configJson);
 if (config.error) {
@@ -29,7 +30,8 @@ if (parsedConfig.errors.length) {
     process.exit(1);
 }
 var program = ts.createProgram(parsedConfig.fileNames, parsedConfig.options);
-program.emit();
+// program.emit();
+reportDiagnostics(program.getSyntacticDiagnostics());
 var outDir = parsedConfig.options.outDir;
 if (!outDir) {
     console.error("outDir option must be set");
