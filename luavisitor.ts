@@ -682,7 +682,7 @@ ${this.result}`;
                 break;
             case ts.SyntaxKind.StringLiteral:
                 const stringLiteral = <ts.StringLiteral>node;
-                this.result += '"' + stringLiteral.text.replace("\r", "\\r").replace("\n", "\\n").replace(/"/g, '\\"') + '"';
+                this.writeQuotedString(stringLiteral.text);
                 break;
             case ts.SyntaxKind.SuperKeyword:
                 {
@@ -698,7 +698,7 @@ ${this.result}`;
                 {
                     const templateExpression = <ts.TemplateExpression>node;
                     // for (const templateSpan of templateExpression.templateSpans) {
-                    if (templateExpression.head) {
+                    if (templateExpression.head && templateExpression.head.text.length > 0) {
                         this.traverse(templateExpression.head, tabs, node);
                         if (templateExpression.templateSpans.length > 0)
                             this.result += " .. ";
@@ -709,13 +709,17 @@ ${this.result}`;
             case ts.SyntaxKind.TemplateHead:
                 {
                     const templateHead = <ts.TemplateHead>node;
-                    this.result += '"' + templateHead.text.replace("\n", "\\n").replace("\r", "\\r").replace("\"", "\\\"") + '"';
+                   this.writeQuotedString(templateHead.text);
                     break;
                 }
             case ts.SyntaxKind.TemplateSpan:
                 {
                     const templateSpan = <ts.TemplateSpan>node;
                     this.traverse(templateSpan.expression, tabs, node);
+                    if (templateSpan.literal && templateSpan.literal.text.length > 0) {
+                        this.result += " .. ";
+                        this.writeQuotedString(templateSpan.literal.text);
+                    }
                     break; 
                 }
             case ts.SyntaxKind.ThisKeyword:
@@ -823,5 +827,9 @@ ${this.result}`;
 
     private hasExportModifier(node: ts.Node) {
         return node.modifiers && node.modifiers.some(x => x.kind === ts.SyntaxKind.ExportKeyword);
+    }
+
+    private writeQuotedString(text: string) {
+        this.result += '"' + text.replace(/\r/g, "\\r").replace(/\n/g, "\\n").replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
     }
 }

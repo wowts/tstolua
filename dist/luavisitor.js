@@ -665,7 +665,7 @@ var LuaVisitor = /** @class */ (function () {
                 break;
             case ts.SyntaxKind.StringLiteral:
                 var stringLiteral = node;
-                this.result += '"' + stringLiteral.text.replace("\r", "\\r").replace("\n", "\\n").replace(/"/g, '\\"') + '"';
+                this.writeQuotedString(stringLiteral.text);
                 break;
             case ts.SyntaxKind.SuperKeyword:
                 {
@@ -681,7 +681,7 @@ var LuaVisitor = /** @class */ (function () {
                 {
                     var templateExpression = node;
                     // for (const templateSpan of templateExpression.templateSpans) {
-                    if (templateExpression.head) {
+                    if (templateExpression.head && templateExpression.head.text.length > 0) {
                         this.traverse(templateExpression.head, tabs, node);
                         if (templateExpression.templateSpans.length > 0)
                             this.result += " .. ";
@@ -692,13 +692,17 @@ var LuaVisitor = /** @class */ (function () {
             case ts.SyntaxKind.TemplateHead:
                 {
                     var templateHead = node;
-                    this.result += '"' + templateHead.text.replace("\n", "\\n").replace("\r", "\\r").replace("\"", "\\\"") + '"';
+                    this.writeQuotedString(templateHead.text);
                     break;
                 }
             case ts.SyntaxKind.TemplateSpan:
                 {
                     var templateSpan = node;
                     this.traverse(templateSpan.expression, tabs, node);
+                    if (templateSpan.literal && templateSpan.literal.text.length > 0) {
+                        this.result += " .. ";
+                        this.writeQuotedString(templateSpan.literal.text);
+                    }
                     break;
                 }
             case ts.SyntaxKind.ThisKeyword:
@@ -803,6 +807,9 @@ var LuaVisitor = /** @class */ (function () {
     };
     LuaVisitor.prototype.hasExportModifier = function (node) {
         return node.modifiers && node.modifiers.some(function (x) { return x.kind === ts.SyntaxKind.ExportKeyword; });
+    };
+    LuaVisitor.prototype.writeQuotedString = function (text) {
+        this.result += '"' + text.replace(/\r/g, "\\r").replace(/\n/g, "\\n").replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
     };
     return LuaVisitor;
 }());

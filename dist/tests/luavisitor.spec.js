@@ -69,7 +69,7 @@ ava_1.test(function (t) {
     t.is(testTransform(t, "`${'3'}${3}`"), "\"3\" .. 3\n");
 });
 ava_1.test.only(function (t) {
-    t.is(testTransform(t, "`z${'3'}${3}`z"), "\"z\" .. \"3\" .. 3 .. \"z\"\n");
+    t.is(testTransform(t, "`z${'3'}${3}z`"), "\"z\" .. \"3\" .. 3 .. \"z\"\n");
 });
 ava_1.test(function (t) {
     t.is(testTransform(t, "function a(){\n    return new Test();\n}\nexport class Test {}\n"), "local __addonName, __addon = ...\n__addon.require(__addonName, __addon, \"source\", {}, function(__exports)\nlocal a = function()\n    return __exports.Test()\nend\n__exports.Test = __class(nil, {\n})\nend)\n");

@@ -190,7 +190,7 @@ test(t => {
 });
 
 test.only(t => {
-    t.is(testTransform(t, "`z${'3'}${3}`z"), "\"z\" .. \"3\" .. 3 .. \"z\"\n");
+    t.is(testTransform(t, "`z${'3'}${3}z`"), "\"z\" .. \"3\" .. 3 .. \"z\"\n");
 });
 
 test(t => {
