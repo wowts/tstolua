@@ -3,7 +3,7 @@ import * as fs from "fs";
 import { LuaVisitor } from "./luavisitor";
 import * as path from "path";
 
-function reportDiagnostics(diagnostics: ts.Diagnostic[]): void { 
+function reportDiagnostics(diagnostics: ts.Diagnostic[]): void {
     diagnostics.forEach(diagnostic => {
         let message = "Error";
         if (diagnostic.file && diagnostic.start) {
@@ -41,12 +41,25 @@ if (!outDir) {
     process.exit(1);
 }
 else { 
-    let fileList = `<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\\FrameXML\\UI.xsd">\n`;
+    interface Source {
+        name: string;
+        references: Source[];
+        referencedBy: Source[];
+    }
+    const sortedSources:Source[] = [];
+    const sources: Source[] = [];
+    const allSources = new Map<string, Source>();
     const checker = program.getTypeChecker();
+
+    function getModuleName(fullPath: string) {
+        return path.normalize(fullPath).replace(rootPath, "").replace(/^[\\/]/,"").replace(/\.ts$/, "");
+    }
+
     for (const sourceFile of program.getSourceFiles()) {
         if (sourceFile.isDeclarationFile || sourceFile.fileName.match(/wow\.ts$/)) continue; // TODO until it's in a package
-        const moduleName = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/^[\\/]/,"").replace(/\.ts$/, "");
+        const moduleName = getModuleName(sourceFile.fileName);
         sourceFile.moduleName = "./" + moduleName.replace("\\", "/");
+
         const luaVisitor = new LuaVisitor(sourceFile, checker);
         luaVisitor.traverse(sourceFile, 0, undefined);
         const relativePath = moduleName + ".lua";
@@ -56,7 +69,54 @@ else {
         for (const error of luaVisitor.errors) {
             console.error(error);
         }
-        fileList += `   <Script file="${relativePath}"/>\n`;
+        let source =  allSources.get(moduleName);
+        if (source == undefined) {
+            source = { referencedBy:[], references:[], name: moduleName };
+            allSources.set(moduleName, source);
+        }
+        
+        const modules:Map<string, any> = (<any>sourceFile).resolvedModules;
+        if (modules) {
+            for (const [key, value] of modules.entries()) {
+                if (value && !value.isExternalLibraryImport) {
+                    const fileName = getModuleName(value.resolvedFileName);
+                    let otherSource = allSources.get(fileName);
+                    if (otherSource == undefined) {
+                        otherSource = <Source>{ referencedBy:[], references:[], name: fileName};
+                        allSources.set(fileName, otherSource);
+                    }
+                    otherSource.referencedBy.push(source);
+                    source.references.push(otherSource);
+                }
+            }
+        }
+        else {
+            sources.push(source);
+        }
+    }
+
+    // https://en.wikipedia.org/wiki/Topological_sorting
+    while (sources.length > 0) {
+        const source = sources.pop();
+        if (!source) break;
+        sortedSources.push(source);
+        for (const reference of source.referencedBy) {
+            reference.references.splice(reference.references.indexOf(source), 1);
+            if (reference.references.length == 0) {
+                sources.push(reference);
+            }
+        }
+    }
+
+    for (const source of allSources.values()) {
+        if (source.references.length > 0) {
+            console.error(`${source.name} has circular dependencies with ${source.references.map(x => x.name).join(",")}`);
+        }
+    }
+
+    let fileList = `<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\\FrameXML\\UI.xsd">\n`;
+    for (const source of sortedSources) {
+        fileList += `   <Script file="${source.name}.lua"/>\n`;
     }
     fileList += `</Ui>`;
 

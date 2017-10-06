@@ -1,65 +1,112 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var ts = require("typescript");
-var fs = require("fs");
-var luavisitor_1 = require("./luavisitor");
-var path = require("path");
+const ts = require("typescript");
+const fs = require("fs");
+const luavisitor_1 = require("./luavisitor");
+const path = require("path");
 function reportDiagnostics(diagnostics) {
-    diagnostics.forEach(function (diagnostic) {
-        var message = "Error";
+    diagnostics.forEach(diagnostic => {
+        let message = "Error";
         if (diagnostic.file && diagnostic.start) {
-            var _a = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start), line = _a.line, character = _a.character;
-            message += " " + diagnostic.file.fileName + " (" + (line + 1) + "," + (character + 1) + ")";
+            let { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+            message += ` ${diagnostic.file.fileName} (${line + 1},${character + 1})`;
         }
         message += ": " + ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
         console.error(message);
     });
 }
-var configFileName = path.resolve(process.argv[2] || "C:\\Program Files (x86)\\World of Warcraft\\Interface\\AddOns\\Ovale\\tsconfig.json");
-// "d:/Applications/World of Warcraft/Interface/AddOns/Ovale/tsconfig.json"); 
-var configJson = fs.readFileSync(configFileName).toString();
-var config = ts.parseConfigFileTextToJson(configFileName, configJson);
+const configFileName = path.resolve(process.argv[2] // || "C:\\Program Files (x86)\\World of Warcraft\\Interface\\AddOns\\Ovale\\tsconfig.json");
+    || "d:/Applications/World of Warcraft/Interface/AddOns/Ovale/tsconfig.json");
+const configJson = fs.readFileSync(configFileName).toString();
+const config = ts.parseConfigFileTextToJson(configFileName, configJson);
 if (config.error) {
     reportDiagnostics([config.error]);
     process.exit(1);
 }
-var rootPath = path.dirname(configFileName);
-var parsedConfig = ts.parseJsonConfigFileContent(config.config, ts.sys, rootPath);
+const rootPath = path.dirname(configFileName);
+const parsedConfig = ts.parseJsonConfigFileContent(config.config, ts.sys, rootPath);
 if (parsedConfig.errors.length) {
     reportDiagnostics(parsedConfig.errors);
     process.exit(1);
 }
-var program = ts.createProgram(parsedConfig.fileNames, parsedConfig.options);
+const program = ts.createProgram(parsedConfig.fileNames, parsedConfig.options);
 // program.emit();
 reportDiagnostics(program.getSyntacticDiagnostics());
-var outDir = parsedConfig.options.outDir;
+const outDir = parsedConfig.options.outDir;
 if (!outDir) {
     console.error("outDir option must be set");
     process.exit(1);
 }
 else {
-    var fileList = "<Ui xmlns=\"http://www.blizzard.com/wow/ui/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.blizzard.com/wow/ui/ ..\\FrameXML\\UI.xsd\">\n";
-    var checker = program.getTypeChecker();
-    for (var _i = 0, _a = program.getSourceFiles(); _i < _a.length; _i++) {
-        var sourceFile = _a[_i];
+    const sortedSources = [];
+    const sources = [];
+    const allSources = new Map();
+    const checker = program.getTypeChecker();
+    function getModuleName(fullPath) {
+        return path.normalize(fullPath).replace(rootPath, "").replace(/^[\\/]/, "").replace(/\.ts$/, "");
+    }
+    for (const sourceFile of program.getSourceFiles()) {
         if (sourceFile.isDeclarationFile || sourceFile.fileName.match(/wow\.ts$/))
             continue; // TODO until it's in a package
-        var moduleName = path.normalize(sourceFile.fileName).replace(rootPath, "").replace(/^[\\/]/, "").replace(/\.ts$/, "");
+        const moduleName = getModuleName(sourceFile.fileName);
         sourceFile.moduleName = "./" + moduleName.replace("\\", "/");
-        var luaVisitor = new luavisitor_1.LuaVisitor(sourceFile, checker);
+        const luaVisitor = new luavisitor_1.LuaVisitor(sourceFile, checker);
         luaVisitor.traverse(sourceFile, 0, undefined);
-        var relativePath = moduleName + ".lua";
-        var outputPath = path.join(outDir, relativePath);
+        const relativePath = moduleName + ".lua";
+        const outputPath = path.join(outDir, relativePath);
         if (!fs.existsSync(path.dirname(outputPath)))
             fs.mkdirSync(path.dirname(outputPath));
         fs.writeFileSync(outputPath, luaVisitor.getResult());
-        for (var _b = 0, _c = luaVisitor.errors; _b < _c.length; _b++) {
-            var error = _c[_b];
+        for (const error of luaVisitor.errors) {
             console.error(error);
         }
-        fileList += "   <Script file=\"" + relativePath + "\"/>\n";
+        let source = allSources.get(moduleName);
+        if (source == undefined) {
+            source = { referencedBy: [], references: [], name: moduleName };
+            allSources.set(moduleName, source);
+        }
+        const modules = sourceFile.resolvedModules;
+        if (modules) {
+            for (const [key, value] of modules.entries()) {
+                if (value && !value.isExternalLibraryImport) {
+                    const fileName = getModuleName(value.resolvedFileName);
+                    let otherSource = allSources.get(fileName);
+                    if (otherSource == undefined) {
+                        otherSource = { referencedBy: [], references: [], name: fileName };
+                        allSources.set(fileName, otherSource);
+                    }
+                    otherSource.referencedBy.push(source);
+                    source.references.push(otherSource);
+                }
+            }
+        }
+        else {
+            sources.push(source);
+        }
     }
-    fileList += "</Ui>";
+    // https://en.wikipedia.org/wiki/Topological_sorting
+    while (sources.length > 0) {
+        const source = sources.pop();
+        if (!source)
+            break;
+        sortedSources.push(source);
+        for (const reference of source.referencedBy) {
+            reference.references.splice(reference.references.indexOf(source), 1);
+            if (reference.references.length == 0) {
+                sources.push(reference);
+            }
+        }
+    }
+    for (const source of allSources.values()) {
+        if (source.references.length > 0) {
+            console.error(`${source.name} has circular dependencies with ${source.references.map(x => x.name).join(",")}`);
+        }
+    }
+    let fileList = `<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\\FrameXML\\UI.xsd">\n`;
+    for (const source of sortedSources) {
+        fileList += `   <Script file="${source.name}.lua"/>\n`;
+    }
+    fileList += `</Ui>`;
     fs.writeFileSync(path.join(outDir, "files.xml"), fileList);
 }
 //# sourceMappingURL=index.js.map
