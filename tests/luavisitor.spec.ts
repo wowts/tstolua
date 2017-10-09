@@ -177,6 +177,10 @@ test(t => {
     t.is(testTransform(t, "3 + 3"), "3 + 3\n");
 });
 
+test.only(t => {
+    t.is(testTransform(t, "for (const [] of toto) {}"), "for _ in toto do\nend\n");
+});
+
 
 test(t => {
     t.is(testTransform(t, "a = { 1: 'a' }"), `a = {
@@ -189,7 +193,8 @@ test(t => {
     t.is(testTransform(t, "`${'3'}${3}`"), "\"3\" .. 3\n");
 });
 
-test.only(t => {
+
+test(t => {
     t.is(testTransform(t, "`z${'3'}${3}z`"), "\"z\" .. \"3\" .. 3 .. \"z\"\n");
 });
 

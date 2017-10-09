@@ -163,6 +163,9 @@ ava_1.test(t => {
 ava_1.test(t => {
     t.is(testTransform(t, "3 + 3"), "3 + 3\n");
 });
+ava_1.test.only(t => {
+    t.is(testTransform(t, "for (const [] of toto) {}"), "for _ in toto do\nend\n");
+});
 ava_1.test(t => {
     t.is(testTransform(t, "a = { 1: 'a' }"), `a = {
     [1] = "a"
@@ -172,7 +175,7 @@ ava_1.test(t => {
 ava_1.test(t => {
     t.is(testTransform(t, "`${'3'}${3}`"), "\"3\" .. 3\n");
 });
-ava_1.test.only(t => {
+ava_1.test(t => {
     t.is(testTransform(t, "`z${'3'}${3}z`"), "\"z\" .. \"3\" .. 3 .. \"z\"\n");
 });
 ava_1.test(t => {

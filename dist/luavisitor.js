@@ -300,6 +300,12 @@ ${this.result}`;
                         this.writeArray(constr.parameters, tabs, node);
                     }
                     this.result += ")\n";
+                    for (const parameter of constr.parameters) {
+                        if (parameter.modifiers && parameter.modifiers.some(x => x.kind === ts.SyntaxKind.PrivateKeyword || x.kind === ts.SyntaxKind.PublicKeyword)) {
+                            this.writeTabs(tabs + 1);
+                            this.result += `self.${parameter.name.getText()} = ${parameter.name.getText()}\n`;
+                        }
+                    }
                     if (constr.parent) {
                         for (const member of constr.parent.members) {
                             if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
@@ -411,6 +417,12 @@ ${this.result}`;
                 this.writeTabs(tabs);
                 this.result += "for ";
                 const forOfStatement = node;
+                if (forOfStatement.initializer.kind === ts.SyntaxKind.ArrayLiteralExpression) {
+                    const initializer = forOfStatement.initializer;
+                    if (initializer.elements.length === 0) {
+                        this.result += "_";
+                    }
+                }
                 this.traverse(forOfStatement.initializer, tabs, node);
                 this.result += " in ";
                 this.traverse(forOfStatement.expression, tabs, node);
@@ -546,6 +558,9 @@ ${this.result}`;
                 else {
                     this.result += "{}";
                 }
+                break;
+            case ts.SyntaxKind.OmittedExpression:
+                this.result += "_";
                 break;
             case ts.SyntaxKind.MethodDeclaration:
                 const methodDeclaration = node;
@@ -720,6 +735,11 @@ ${this.result}`;
                 }
             case ts.SyntaxKind.VariableDeclaration:
                 const variableDeclaration = node;
+                if (variableDeclaration.name.kind === ts.SyntaxKind.ArrayBindingPattern) {
+                    const arrayBindingPattern = variableDeclaration.name;
+                    if (arrayBindingPattern.elements.length == 0)
+                        this.result += "_";
+                }
                 this.traverse(variableDeclaration.name, tabs, node, options);
                 if (variableDeclaration.initializer) {
                     this.result += " = ";
@@ -805,7 +825,7 @@ ${this.result}`;
         return node.modifiers && node.modifiers.some(x => x.kind === ts.SyntaxKind.ExportKeyword);
     }
     writeQuotedString(text) {
-        this.result += '"' + text.replace(/\r/g, "\\r").replace(/\n/g, "\\n").replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+        this.result += '"' + text.replace(/\\/g, "\\\\").replace(/\r/g, "\\r").replace(/\n/g, "\\n").replace(/"/g, '\\"') + '"';
     }
 }
 exports.LuaVisitor = LuaVisitor;

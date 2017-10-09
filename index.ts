@@ -15,7 +15,7 @@ function reportDiagnostics(diagnostics: ts.Diagnostic[]): void {
     });
 }
 
-const configFileName = path.resolve(process.argv[2] || "C:\\Program Files (x86)\\World of Warcraft\\Interface\\AddOns\\Ovale\\tsconfig.json");
+const configFileName = path.resolve(process.argv[2] || "C:\\Program Files (x86)\\World of Warcraft Public Test\\Interface\\AddOns\\Ovale\\tsconfig.json");
     // "d:/Applications/World of Warcraft/Interface/AddOns/Ovale/tsconfig.json"); 
 
 const configJson = fs.readFileSync(configFileName).toString();
@@ -35,6 +35,8 @@ if (parsedConfig.errors.length) {
 const program = ts.createProgram(parsedConfig.fileNames, parsedConfig.options);
 // program.emit();
 reportDiagnostics(program.getSyntacticDiagnostics());
+reportDiagnostics(program.getSemanticDiagnostics());
+// reportDiagnostics(program.getDeclarationDiagnostics());
 const outDir = parsedConfig.options.outDir;
 if (!outDir) {
     console.error("outDir option must be set");
