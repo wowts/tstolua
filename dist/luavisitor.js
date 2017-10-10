@@ -436,9 +436,16 @@ ${this.result}`;
                     const functionDeclaration = node;
                     const isExport = this.writeLocalOrExport(functionDeclaration);
                     if (functionDeclaration.name) {
+                        if (!isExport)
+                            this.result += "function ";
                         this.traverse(functionDeclaration.name, tabs, node, { export: isExport });
                     }
-                    this.result += " = function(";
+                    if (isExport) {
+                        this.result += " = function(";
+                    }
+                    else {
+                        this.result += "(";
+                    }
                     this.writeArray(functionDeclaration.parameters, tabs, node);
                     this.result += ")\n";
                     if (functionDeclaration.body) {
@@ -626,8 +633,12 @@ ${this.result}`;
                         //     }
                         // }
                         const symbol = this.typeChecker.getSymbolAtLocation(access);
-                        if (symbol !== undefined)
+                        if (symbol !== undefined) {
                             isMethodCall = (symbol.getFlags() & ts.SymbolFlags.Method) > 0;
+                        }
+                        else {
+                            this.addTextError(node, "Unable to know the type of this expression");
+                        }
                     }
                     this.result += isMethodCall ? ":" : ".";
                     this.result += access.name.text;
