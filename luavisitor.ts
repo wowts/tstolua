@@ -11,9 +11,6 @@ interface Import {
 export class LuaVisitor {
     private result = "";
     private imports: Import[] = [];
-    private addonNameVariable: string;
-    private addonVariable: string;
-    private addonModule: string;
     private importedVariables: {[name:string]: string} = {};
     private exportedVariables: {[name: string]: boolean} = {};
     private classDeclarations: ts.ClassLikeDeclaration[] = [];
@@ -37,25 +34,20 @@ export class LuaVisitor {
             break;
         }
         if (hasExportedVariables) {
-            if (!this.addonNameVariable) this.addonNameVariable = "__addonName";
-            if (!this.addonVariable) this.addonVariable = "__addon";
-            // const moduleName = path.basename(this.sourceFile.fileName, ".ts");
             const moduleName = this.sourceFile.moduleName;
             const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
             if (this.imports.length > 0) {
-                this.result = `${this.addonVariable}.require(${this.addonNameVariable}, ${this.addonVariable}, "${moduleName}", { "${modules.join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
+                this.result = `__addon.require("${moduleName}", { "${modules.join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
 ${this.result}end)
 `;
             }
             else {
-                this.result = `${this.addonVariable}.require(${this.addonNameVariable}, ${this.addonVariable}, "${moduleName}", {}, function(__exports)
+                this.result = `__addon.require("${moduleName}", {}, function(__exports)
 ${this.result}end)
 `;
             }
-        }
-        if (this.addonNameVariable != undefined) {
-            this.result = `local ${this.addonNameVariable}, ${this.addonVariable} = ...
-${this.result}`;
+            this.result = `local __addonName, __addon = ...
+            ${this.result}`;
         }
         return this.result;
     }
@@ -224,7 +216,7 @@ ${this.result}`;
                         }                        
                         this.result += " = ";
                     }
-                    this.result += "__class(";
+                    this.result += "__addon.__class(";
                     if (!this.writeHeritage(classExpression, tabs, node)) {
                         this.result += "nil";
                     }
@@ -270,7 +262,7 @@ ${this.result}`;
                         this.classDeclarations.push(this.currentClassDeclaration);
                     }
                     this.currentClassDeclaration = classExpression;
-                    this.result += "__class(";
+                    this.result += "__addon.__class(";
                     if (classExpression.heritageClauses) {
                         this.writeHeritage(classExpression, tabs, node);
                     }
@@ -549,10 +541,11 @@ ${this.result}`;
                 const importDeclaration = <ts.ImportDeclaration>node;
                 if (!importDeclaration.importClause) break;
                 const module = <ts.StringLiteral>importDeclaration.moduleSpecifier;
-                if (module.text == "addon" && importDeclaration.importClause.name) {
-                    this.addonModule = importDeclaration.importClause.name.text;
-                }
-                else {
+                // if (module.text == "addon" && importDeclaration.importClause.name) {
+                //     this.addonModule = importDeclaration.importClause.name.text;
+                // }
+                // else 
+                {
                     if (importDeclaration.importClause.name) {
                         this.imports.push({ module: module.text, variable: importDeclaration.importClause.name.text });
                     }
