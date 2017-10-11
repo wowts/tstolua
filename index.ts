@@ -52,9 +52,10 @@ else {
     const sources: Source[] = [];
     const allSources = new Map<string, Source>();
     const checker = program.getTypeChecker();
+    const rootDir = path.normalize(parsedConfig.options.rootDir || rootPath);
 
     function getModuleName(fullPath: string) {
-        return path.normalize(fullPath).replace(rootPath, "").replace(/^[\\/]/,"").replace(/\.ts$/, "");
+        return path.normalize(fullPath).replace(rootDir, "").replace(/^[\\/]/,"").replace(/\.ts$/, "");
     }
 
     for (const sourceFile of program.getSourceFiles()) {

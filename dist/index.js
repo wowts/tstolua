@@ -44,8 +44,9 @@ else {
     const sources = [];
     const allSources = new Map();
     const checker = program.getTypeChecker();
+    const rootDir = path.normalize(parsedConfig.options.rootDir || rootPath);
     function getModuleName(fullPath) {
-        return path.normalize(fullPath).replace(rootPath, "").replace(/^[\\/]/, "").replace(/\.ts$/, "");
+        return path.normalize(fullPath).replace(rootDir, "").replace(/^[\\/]/, "").replace(/\.ts$/, "");
     }
     for (const sourceFile of program.getSourceFiles()) {
         if (sourceFile.isDeclarationFile || sourceFile.fileName.match(/wow\.ts$/))
