@@ -5,7 +5,10 @@
                 "type": "node",
                 "request": "launch",
                 "name": "Launch Program",
-                "program": "${file}",
+                "program": "${workspaceRoot}/index.ts",
+                "args": [
+                    "../tslib/tsconfig.json"
+                ],
                 "outFiles": [
                     "${workspaceRoot}/dist/**/*.js"
                 ],

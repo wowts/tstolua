@@ -15,22 +15,23 @@ function reportDiagnostics(diagnostics) {
         console.error(message);
     });
 }
-const configFileName = path.resolve(process.argv[2] || "C:\\Program Files (x86)\\World of Warcraft Public Test\\Interface\\AddOns\\Ovale\\tsconfig.json");
-// "d:/Applications/World of Warcraft/Interface/AddOns/Ovale/tsconfig.json"); 
+const configFileName = path.resolve(process.argv[2] || "./tsconfig.json");
 const packageFileName = configFileName.replace(/tsconfig\.json$/, "package.json");
 const packageFile = JSON.parse(fs.readFileSync(packageFileName).toString());
 const version = packageFile.version;
 const match = version.match(/(\d+)(?:\.(\d+))(?:\.(\d+))/);
 let major, minor, patch;
-let moduleVersion = 0;
+let appVersion = 0;
 if (match) {
-    [major, minor, patch] = match;
-    moduleVersion = (parseInt(major) * 100 + parseInt(minor)) * 100 + parseInt(patch);
+    [, major, minor, patch] = match;
+    appVersion = (parseInt(major) * 100 + parseInt(minor)) * 100 + parseInt(patch);
 }
 else {
     console.error(`Can't parse package.json version number ${version}`);
     process.exit(1);
 }
+let appName = packageFile.name;
+appName = appName.replace(/^@.*\//, "");
 const configJson = fs.readFileSync(configFileName).toString();
 const config = ts.parseConfigFileTextToJson(configFileName, configJson);
 if (config.error) {
@@ -67,7 +68,7 @@ else {
             continue; // TODO until it's in a package
         const moduleName = getModuleName(sourceFile.fileName);
         sourceFile.moduleName = "./" + moduleName.replace("\\", "/");
-        const luaVisitor = new luavisitor_1.LuaVisitor(sourceFile, checker, moduleVersion);
+        const luaVisitor = new luavisitor_1.LuaVisitor(sourceFile, checker, appVersion, appName);
         luaVisitor.traverse(sourceFile, 0, undefined);
         const relativePath = moduleName + ".lua";
         const outputPath = path.join(outDir, relativePath);

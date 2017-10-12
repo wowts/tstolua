@@ -35,7 +35,7 @@ export class LuaVisitor {
     public errors:string[] = [];
     private needClass = false;
     
-    constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker, private moduleVersion: number)  {
+    constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker, private moduleVersion: number, private appName: string)  {
         if (typeChecker) {
             const currentModule = typeChecker.getSymbolAtLocation(sourceFile);
             if (currentModule) {
@@ -65,16 +65,16 @@ export class LuaVisitor {
 //             }
 //             this.result = `local __addonName, __addon = ...
 //             ${this.result}`;
-            let prehambule = hasExportedVariables || this.imports.length > 0 ? "local __addonName = ...\n" : "";
+            let prehambule = "";
             if (hasExportedVariables) {
                 let fullModuleName: string;
-                if (this.sourceFile.moduleName === "index") {
-                    fullModuleName = "__addonName";
+                if (this.sourceFile.moduleName === "./index") {
+                    fullModuleName = this.appName;
                 }
                 else {
-                    fullModuleName = `__addonName .. "/${this.sourceFile.moduleName}"`;
+                    fullModuleName = `${this.appName}/${this.sourceFile.moduleName.replace(/^\.\//, "")}`;
                 }
-                prehambule += `local __exports = LibStub:NewLibrary(${fullModuleName}, ${this.moduleVersion})
+                prehambule += `local __exports = LibStub:NewLibrary("${fullModuleName}", ${this.moduleVersion})
 if not __exports then return end
 `;
             }
@@ -90,16 +90,27 @@ if not __exports then return end
                     if (imp.module.indexOf(".") == 0) {
                         fullModuleName = path.join(path.dirname(this.sourceFile.fileName), imp.module).replace(/\\/g, "/")
                         if (fullModuleName === "index") {
-                            fullModuleName = "__addonName";
+                            fullModuleName = this.appName;
                         }
                         else {
-                            fullModuleName = `__addonName .. "/${fullModuleName}"`;
+                            fullModuleName = `${this.appName}/${fullModuleName}`;
                         }
+                        prehambule += `local ${moduleVariableName} = LibStub:GetLibrary("${fullModuleName}")\n`;
                     } 
                     else {
-                        fullModuleName = `"${imp.module}"`;
+                        let moduleName = imp.module;
+                        if (moduleName.indexOf("_") >= 0) {
+                            moduleName = moduleName.replace(/_(\w)/g, (_,x) => x.toUpperCase());
+                            moduleName = moduleName.replace(/^\w/, x => x.toUpperCase());
+                        }
+                        fullModuleName = `"${moduleName}"`;
+                        if (globalModules[imp.module] === ModuleType.WithObject) {
+                            prehambule += `local ${moduleVariableName} = LibStub:GetLibrary(${fullModuleName})\n`;
+                        }
+                        else {
+                            prehambule += `local ${moduleVariableName} = LibStub:GetLibrary(${fullModuleName}, true)\n`;
+                        }
                     }
-                    prehambule += `local ${moduleVariableName} = LibStub:GetLibrary(${fullModuleName})\n`;
                 }
                 if (imp.variables) {
                     for (const variable of imp.variables) {

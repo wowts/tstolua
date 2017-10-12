@@ -16,10 +16,10 @@ function testTransform(t:TestContext, source: string) {
         return x.messageText + " at " + (x.file && x.start && x.file.getLineAndCharacterOfPosition(x.start).line)
     } ), []);
     let sourceFile = program.getSourceFile(fileName);
-    sourceFile.moduleName = "source";
+    sourceFile.moduleName = "./source";
     //const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, false);
     // TODO how to create the type checker without the program or how to create a program from a source file?
-    const visitor = new LuaVisitor(sourceFile, program.getTypeChecker(), 1);
+    const visitor = new LuaVisitor(sourceFile, program.getTypeChecker(), 1, "test");
     visitor.traverse(sourceFile, 0, undefined);
     fs.unlinkSync(fileName);
     return visitor.getResult();
@@ -79,13 +79,14 @@ test(t => {
     t.is(testTransform(t, `import { OvaleScripts } from "./OvaleScripts";
 let a = OvaleScripts;
 import Test from 'Test';
+import AceAddon from "ace_addon-3.0";
 export const bla = 3;
-`), `local __addonName = ...
-local __exports = LibStub:NewLibrary(__addonName .. "/source", 1)
+`), `local __exports = LibStub:NewLibrary("test/source", 1)
 if not __exports then return end
-local __OvaleScripts = LibStub:GetLibrary(__addonName .. "/testfiles/test5/OvaleScripts")
+local __OvaleScripts = LibStub:GetLibrary("test/testfiles/test5/OvaleScripts")
 local OvaleScripts = __OvaleScripts.OvaleScripts
-local Test = LibStub:GetLibrary("Test")
+local Test = LibStub:GetLibrary("Test", true)
+local AceAddon = LibStub:GetLibrary("AceAddon-3.0", true)
 local a = OvaleScripts
 __exports.bla = 3
 `);
@@ -207,8 +208,7 @@ test(t => {
     return new Test();
 }
 export class Test {}
-`), `local __addonName = ...
-local __exports = LibStub:NewLibrary(__addonName .. "/source", 1)
+`), `local __exports = LibStub:NewLibrary("test/source", 1)
 if not __exports then return end
 local __class = LibStub:GetLibrary("tslib").newClass
 local function a()
@@ -306,8 +306,7 @@ test("imports mock modules", t => {
 import { c } from "@wowts/lua";
 const z = a;
 c();
-    `), `local __addonName = ...
-local __table = LibStub:GetLibrary("@wowts/table")
+    `), `local __table = LibStub:GetLibrary("@wowts/table")
 local a = __table.a
 local b = __table.b
 local c = c
