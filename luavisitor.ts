@@ -5,18 +5,35 @@ interface Options { elseIf?: boolean, callee?: boolean, class?: string, export?:
 
 interface Import {
     module: string;
-    variable: string;
+    variable?: string;
+    variables?: string[];
 }
+
+enum ModuleType {
+    WithoutObject,
+    WithObject
+}
+
+const globalModules:{[key:string]: ModuleType} = {
+    ["@wowts/table"]: ModuleType.WithObject,
+    ["@wowts/string"]: ModuleType.WithObject,
+    ["@wowts/coroutine"]: ModuleType.WithObject,
+    ["@wowts/math"]: ModuleType.WithObject,
+    ["@wowts/bit"]: ModuleType.WithObject,
+    ["@wowts/wow-mock"]: ModuleType.WithoutObject,
+    ["@wowts/lua"]: ModuleType.WithoutObject,
+};
 
 export class LuaVisitor {
     private result = "";
     private imports: Import[] = [];
-    private importedVariables: {[name:string]: string} = {};
+    // private importedVariables: {[name:string]: string} = {};
     private exportedVariables: {[name: string]: boolean} = {};
     private classDeclarations: ts.ClassLikeDeclaration[] = [];
     private currentClassDeclaration: ts.ClassLikeDeclaration | undefined = undefined;
     private exports:ts.Symbol[] = [];
     public errors:string[] = [];
+    private needClass = false;
     
     constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker, private moduleVersion: number)  {
         if (typeChecker) {
@@ -28,12 +45,12 @@ export class LuaVisitor {
     }
 
     getResult() {
-        let hasExportedVariables = this.imports.length > 0;
+        let hasExportedVariables = false;
         for (const key in this.exportedVariables) {
             hasExportedVariables = true;
             break;
         }
-        if (hasExportedVariables) {
+        if (this.imports.length > 0 ||hasExportedVariables || this.needClass) {
 //             const moduleName = this.sourceFile.moduleName;
 //             const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
 //             if (this.imports.length > 0) {
@@ -48,17 +65,54 @@ export class LuaVisitor {
 //             }
 //             this.result = `local __addonName, __addon = ...
 //             ${this.result}`;
-            let fullModuleName: string;
-            if (this.sourceFile.moduleName === "index") {
-                fullModuleName = "__addonName";
-            }
-            else {
-                fullModuleName = `__addonName .. "/${this.sourceFile.moduleName}"`;
-            }
-            this.result = `local __addonName = ...
-local __exports = LibStub:NewLibrary(${fullModuleName}, ${this.moduleVersion})
+            let prehambule = hasExportedVariables || this.imports.length > 0 ? "local __addonName = ...\n" : "";
+            if (hasExportedVariables) {
+                let fullModuleName: string;
+                if (this.sourceFile.moduleName === "index") {
+                    fullModuleName = "__addonName";
+                }
+                else {
+                    fullModuleName = `__addonName .. "/${this.sourceFile.moduleName}"`;
+                }
+                prehambule += `local __exports = LibStub:NewLibrary(${fullModuleName}, ${this.moduleVersion})
 if not __exports then return end
-${this.result}`;
+`;
+            }
+
+            if (this.needClass) {
+                prehambule += "local __class = LibStub:GetLibrary(\"tslib\").newClass\n";
+            }
+    
+            for (const imp of this.imports) {
+                const moduleVariableName = imp.variable || "__" + imp.module.replace("@wowts/","").replace(/[^\w]/g, "");
+                if (globalModules[imp.module] === undefined || globalModules[imp.module] === ModuleType.WithObject) {
+                    let fullModuleName;
+                    if (imp.module.indexOf(".") == 0) {
+                        fullModuleName = path.join(path.dirname(this.sourceFile.fileName), imp.module).replace(/\\/g, "/")
+                        if (fullModuleName === "index") {
+                            fullModuleName = "__addonName";
+                        }
+                        else {
+                            fullModuleName = `__addonName .. "/${fullModuleName}"`;
+                        }
+                    } 
+                    else {
+                        fullModuleName = `"${imp.module}"`;
+                    }
+                    prehambule += `local ${moduleVariableName} = LibStub:GetLibrary(${fullModuleName})\n`;
+                }
+                if (imp.variables) {
+                    for (const variable of imp.variables) {
+                        if (globalModules[imp.module] === ModuleType.WithoutObject) {
+                            prehambule += `local ${variable} = ${variable}\n`
+                        }
+                        else {
+                            prehambule += `local ${variable} = ${moduleVariableName}.${variable}\n`
+                        }
+                    }
+                }
+            }
+            this.result = prehambule + this.result;
         }
         return this.result;
     }
@@ -227,7 +281,8 @@ ${this.result}`;
                         }                        
                         this.result += " = ";
                     }
-                    this.result += "__addon.__class(";
+                    this.needClass = true;
+                    this.result += "__class(";
                     if (!this.writeHeritage(classExpression, tabs, node)) {
                         this.result += "nil";
                     }
@@ -273,7 +328,8 @@ ${this.result}`;
                         this.classDeclarations.push(this.currentClassDeclaration);
                     }
                     this.currentClassDeclaration = classExpression;
-                    this.result += "__addon.__class(";
+                    this.needClass = true;
+                    this.result += "__class(";
                     if (classExpression.heritageClauses) {
                         this.writeHeritage(classExpression, tabs, node);
                     }
@@ -510,9 +566,9 @@ ${this.result}`;
                                 this.result += "__exports.";
                             }
                             this.typeChecker.getRootSymbols(symbol)
-                            if ((symbol.flags & ts.SymbolFlags.AliasExcludes) && this.importedVariables[identifier.text]) {
-                                this.result += this.importedVariables[identifier.text] + ".";
-                            }
+                            // if ((symbol.flags & ts.SymbolFlags.AliasExcludes) && this.importedVariables[identifier.text]) {
+                            //     this.result += this.importedVariables[identifier.text] + ".";
+                            // }
                         }
                     }
                     if (options && options.export) this.exportedVariables[identifier.text] = true;
@@ -561,11 +617,12 @@ ${this.result}`;
                         this.imports.push({ module: module.text, variable: importDeclaration.importClause.name.text });
                     }
                     else if (importDeclaration.importClause.namedBindings) {
-                        const moduleName =  "__" + module.text.replace(/[^\w]/g, "");
-                        this.imports.push({ module: module.text, variable: moduleName});
+                        // const moduleName =  "__" + module.text.replace(/[^\w]/g, "");
+                        const variables:string[] = [];
+                        this.imports.push({ module: module.text, variables: variables});
                         const namedImports = <ts.NamedImports> importDeclaration.importClause.namedBindings;
                         for (const variable of namedImports.elements) {
-                            this.importedVariables[variable.name.text] = moduleName;
+                            variables.push(variable.name.text);
                         }
                     }
                 }

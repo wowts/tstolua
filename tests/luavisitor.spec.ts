@@ -8,10 +8,10 @@ if (!fs.existsSync("testfiles")) fs.mkdirSync("testfiles");
 
 function testTransform(t:TestContext, source: string) {
     const dir = "testfiles/test" + (i++);
-    const fileName = dir + "\\source.ts";
+    const fileName = dir + "/source.ts";
     if (!fs.existsSync(dir)) fs.mkdirSync(dir);
     fs.writeFileSync(fileName, source);
-    const program = ts.createProgram([fileName], { module: ts.ModuleKind.CommonJS, emitDecoratorMetadata: false });
+    const program = ts.createProgram([fileName], { module: ts.ModuleKind.CommonJS, emitDecoratorMetadata: false, rootDir: dir });
     t.deepEqual(program.getSyntacticDiagnostics().map(x => {
         return x.messageText + " at " + (x.file && x.start && x.file.getLineAndCharacterOfPosition(x.start).line)
     } ), []);
@@ -31,7 +31,7 @@ test(t => {
 });
 
 test(t =>  {
-    t.is(testTransform(t, "a.b = a.c(a.d)"), `a.b = a:c(a.d)
+    t.is(testTransform(t, "a.b = a.c(a.d)"), `a.b = a.c(a.d)
 `);
 });
 
@@ -66,7 +66,8 @@ test(t => {
         constructor() {
             super(16);
         }
-}`), `local Test = __class(Base, {
+}`), `local __class = LibStub:GetLibrary("tslib").newClass
+local Test = __class(Base, {
     constructor = function(self)
         Base.constructor(self, 16)
     end,
@@ -75,17 +76,18 @@ test(t => {
 });
 
 test(t => {
-    t.is(testTransform(t, `import __addon from "addon";
-let [OVALE, Ovale] = __addon;
-import { OvaleScripts } from "./OvaleScripts";
+    t.is(testTransform(t, `import { OvaleScripts } from "./OvaleScripts";
 let a = OvaleScripts;
 import Test from 'Test';
 export const bla = 3;
-`), `local OVALE, Ovale = ...
-Ovale.require(OVALE, Ovale, "source", { "./OvaleScripts", "Test" }, function(__exports, __OvaleScripts, Test)
-local a = __OvaleScripts.OvaleScripts
+`), `local __addonName = ...
+local __exports = LibStub:NewLibrary(__addonName .. "/source", 1)
+if not __exports then return end
+local __OvaleScripts = LibStub:GetLibrary(__addonName .. "/testfiles/test5/OvaleScripts")
+local OvaleScripts = __OvaleScripts.OvaleScripts
+local Test = LibStub:GetLibrary("Test")
+local a = OvaleScripts
 __exports.bla = 3
-end)
 `);
 });
 
@@ -119,7 +121,8 @@ test(t => {
         this.a = 4;
     }
 }
-    `), `local Test = __class(Base, {
+    `), `local __class = LibStub:GetLibrary("tslib").newClass
+local Test = __class(Base, {
     constructor = function(self, a)
         self.a = 3
         self.a = a
@@ -161,7 +164,8 @@ test(t => {
         return this.value;
     }
 }
-    `), `return __class(Base, {
+    `), `local __class = LibStub:GetLibrary("tslib").newClass
+return __class(Base, {
     constructor = function(self, ...)
         self.value = 3
         Base.constructor(self, ...)
@@ -177,7 +181,7 @@ test(t => {
     t.is(testTransform(t, "3 + 3"), "3 + 3\n");
 });
 
-test.only(t => {
+test(t => {
     t.is(testTransform(t, "for (const [] of toto) {}"), "for _ in toto do\nend\n");
 });
 
@@ -203,14 +207,15 @@ test(t => {
     return new Test();
 }
 export class Test {}
-`), `local __addonName, __addon = ...
-__addon.require(__addonName, __addon, "source", {}, function(__exports)
-local a = function()
+`), `local __addonName = ...
+local __exports = LibStub:NewLibrary(__addonName .. "/source", 1)
+if not __exports then return end
+local __class = LibStub:GetLibrary("tslib").newClass
+local function a()
     return __exports.Test()
 end
 __exports.Test = __class(nil, {
 })
-end)
 `);
 });
 
@@ -230,7 +235,8 @@ test(t => {
 const a:Test;
 a.a(18);
 a.b(23);
-`), `local Test = __class(nil, {
+`), `local __class = LibStub:GetLibrary("tslib").newClass
+local Test = __class(nil, {
     b = function(self, c)
     end,
     c = function(self)
@@ -271,12 +277,13 @@ class A extends Debug(Test) {
 const a: A;
 a.b();
 a.a();
-`), `local Test = __class(nil, {
+`), `local __class = LibStub:GetLibrary("tslib").newClass
+local Test = __class(nil, {
     b = function(self)
         return 4
     end,
 })
-local Debug = function(Base)
+local function Debug(Base)
     return __class(Base, {
         a = function(self)
             return 3
@@ -284,9 +291,27 @@ local Debug = function(Base)
     })
 end
 local A = __class(Debug(Test), {
+    z = function(self)
+        self:a()
+    end,
 })
 local a
 a:b()
 a:a()
 `)
 })
+
+test("imports mock modules", t => {
+    t.is(testTransform(t, `import { a, b } from "@wowts/table";
+import { c } from "@wowts/lua";
+const z = a;
+c();
+    `), `local __addonName = ...
+local __table = LibStub:GetLibrary("@wowts/table")
+local a = __table.a
+local b = __table.b
+local c = c
+local z = a
+c()
+`);
+});

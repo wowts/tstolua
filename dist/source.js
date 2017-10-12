@@ -1,12 +1,18 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-function a() {
-    return new Test();
+class Test {
+    b() { return 4; }
 }
-var Test = /** @class */ (function () {
-    function Test() {
+function Debug(Base) {
+    return class extends Base {
+        a() { return 3; }
+    };
+}
+class A extends Debug(Test) {
+    z() {
+        this.a();
     }
-    return Test;
-}());
-exports.Test = Test;
+}
+const a;
+a.b();
+a.a();
 //# sourceMappingURL=source.js.map

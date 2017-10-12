@@ -1,6 +1,21 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const ts = require("typescript");
+const path = require("path");
+var ModuleType;
+(function (ModuleType) {
+    ModuleType[ModuleType["WithoutObject"] = 0] = "WithoutObject";
+    ModuleType[ModuleType["WithObject"] = 1] = "WithObject";
+})(ModuleType || (ModuleType = {}));
+const globalModules = {
+    ["@wowts/table"]: ModuleType.WithObject,
+    ["@wowts/string"]: ModuleType.WithObject,
+    ["@wowts/coroutine"]: ModuleType.WithObject,
+    ["@wowts/math"]: ModuleType.WithObject,
+    ["@wowts/bit"]: ModuleType.WithObject,
+    ["@wowts/wow-mock"]: ModuleType.WithoutObject,
+    ["@wowts/lua"]: ModuleType.WithoutObject,
+};
 class LuaVisitor {
     constructor(sourceFile, typeChecker, moduleVersion) {
         this.sourceFile = sourceFile;
@@ -8,12 +23,13 @@ class LuaVisitor {
         this.moduleVersion = moduleVersion;
         this.result = "";
         this.imports = [];
-        this.importedVariables = {};
+        // private importedVariables: {[name:string]: string} = {};
         this.exportedVariables = {};
         this.classDeclarations = [];
         this.currentClassDeclaration = undefined;
         this.exports = [];
         this.errors = [];
+        this.needClass = false;
         if (typeChecker) {
             const currentModule = typeChecker.getSymbolAtLocation(sourceFile);
             if (currentModule) {
@@ -22,12 +38,12 @@ class LuaVisitor {
         }
     }
     getResult() {
-        let hasExportedVariables = this.imports.length > 0;
+        let hasExportedVariables = false;
         for (const key in this.exportedVariables) {
             hasExportedVariables = true;
             break;
         }
-        if (hasExportedVariables) {
+        if (this.imports.length > 0 || hasExportedVariables || this.needClass) {
             //             const moduleName = this.sourceFile.moduleName;
             //             const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
             //             if (this.imports.length > 0) {
@@ -42,17 +58,52 @@ class LuaVisitor {
             //             }
             //             this.result = `local __addonName, __addon = ...
             //             ${this.result}`;
-            let fullModuleName;
-            if (this.sourceFile.moduleName === "index") {
-                fullModuleName = "__addonName";
-            }
-            else {
-                fullModuleName = `__addonName .. "/${this.sourceFile.moduleName}"`;
-            }
-            this.result = `local __addonName = ...
-local __exports = LibStub:NewLibrary(${fullModuleName}, ${this.moduleVersion})
+            let prehambule = hasExportedVariables || this.imports.length > 0 ? "local __addonName = ...\n" : "";
+            if (hasExportedVariables) {
+                let fullModuleName;
+                if (this.sourceFile.moduleName === "index") {
+                    fullModuleName = "__addonName";
+                }
+                else {
+                    fullModuleName = `__addonName .. "/${this.sourceFile.moduleName}"`;
+                }
+                prehambule += `local __exports = LibStub:NewLibrary(${fullModuleName}, ${this.moduleVersion})
 if not __exports then return end
-${this.result}`;
+`;
+            }
+            if (this.needClass) {
+                prehambule += "local __class = LibStub:GetLibrary(\"tslib\").newClass\n";
+            }
+            for (const imp of this.imports) {
+                const moduleVariableName = imp.variable || "__" + imp.module.replace("@wowts/", "").replace(/[^\w]/g, "");
+                if (globalModules[imp.module] === undefined || globalModules[imp.module] === ModuleType.WithObject) {
+                    let fullModuleName;
+                    if (imp.module.indexOf(".") == 0) {
+                        fullModuleName = path.join(path.dirname(this.sourceFile.fileName), imp.module).replace(/\\/g, "/");
+                        if (fullModuleName === "index") {
+                            fullModuleName = "__addonName";
+                        }
+                        else {
+                            fullModuleName = `__addonName .. "/${fullModuleName}"`;
+                        }
+                    }
+                    else {
+                        fullModuleName = `"${imp.module}"`;
+                    }
+                    prehambule += `local ${moduleVariableName} = LibStub:GetLibrary(${fullModuleName})\n`;
+                }
+                if (imp.variables) {
+                    for (const variable of imp.variables) {
+                        if (globalModules[imp.module] === ModuleType.WithoutObject) {
+                            prehambule += `local ${variable} = ${variable}\n`;
+                        }
+                        else {
+                            prehambule += `local ${variable} = ${moduleVariableName}.${variable}\n`;
+                        }
+                    }
+                }
+            }
+            this.result = prehambule + this.result;
         }
         return this.result;
     }
@@ -217,7 +268,8 @@ ${this.result}`;
                         }
                         this.result += " = ";
                     }
-                    this.result += "__addon.__class(";
+                    this.needClass = true;
+                    this.result += "__class(";
                     if (!this.writeHeritage(classExpression, tabs, node)) {
                         this.result += "nil";
                     }
@@ -265,7 +317,8 @@ ${this.result}`;
                         this.classDeclarations.push(this.currentClassDeclaration);
                     }
                     this.currentClassDeclaration = classExpression;
-                    this.result += "__addon.__class(";
+                    this.needClass = true;
+                    this.result += "__class(";
                     if (classExpression.heritageClauses) {
                         this.writeHeritage(classExpression, tabs, node);
                     }
@@ -487,9 +540,9 @@ ${this.result}`;
                                 this.result += "__exports.";
                             }
                             this.typeChecker.getRootSymbols(symbol);
-                            if ((symbol.flags & ts.SymbolFlags.AliasExcludes) && this.importedVariables[identifier.text]) {
-                                this.result += this.importedVariables[identifier.text] + ".";
-                            }
+                            // if ((symbol.flags & ts.SymbolFlags.AliasExcludes) && this.importedVariables[identifier.text]) {
+                            //     this.result += this.importedVariables[identifier.text] + ".";
+                            // }
                         }
                     }
                     if (options && options.export)
@@ -540,11 +593,12 @@ ${this.result}`;
                         this.imports.push({ module: module.text, variable: importDeclaration.importClause.name.text });
                     }
                     else if (importDeclaration.importClause.namedBindings) {
-                        const moduleName = "__" + module.text.replace(/[^\w]/g, "");
-                        this.imports.push({ module: module.text, variable: moduleName });
+                        // const moduleName =  "__" + module.text.replace(/[^\w]/g, "");
+                        const variables = [];
+                        this.imports.push({ module: module.text, variables: variables });
                         const namedImports = importDeclaration.importClause.namedBindings;
                         for (const variable of namedImports.elements) {
-                            this.importedVariables[variable.name.text] = moduleName;
+                            variables.push(variable.name.text);
                         }
                     }
                 }
