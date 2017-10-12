@@ -18,7 +18,7 @@ export class LuaVisitor {
     private exports:ts.Symbol[] = [];
     public errors:string[] = [];
     
-    constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker)  {
+    constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker, private moduleVersion: number)  {
         if (typeChecker) {
             const currentModule = typeChecker.getSymbolAtLocation(sourceFile);
             if (currentModule) {
@@ -34,20 +34,31 @@ export class LuaVisitor {
             break;
         }
         if (hasExportedVariables) {
-            const moduleName = this.sourceFile.moduleName;
-            const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
-            if (this.imports.length > 0) {
-                this.result = `__addon.require("${moduleName}", { "${modules.join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
-${this.result}end)
-`;
+//             const moduleName = this.sourceFile.moduleName;
+//             const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
+//             if (this.imports.length > 0) {
+//                 this.result = `__addon.require("${moduleName}", { "${modules.join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
+// ${this.result}end)
+// `;
+//             }
+//             else {
+//                 this.result = `__addon.require("${moduleName}", {}, function(__exports)
+// ${this.result}end)
+// `;
+//             }
+//             this.result = `local __addonName, __addon = ...
+//             ${this.result}`;
+            let fullModuleName: string;
+            if (this.sourceFile.moduleName === "index") {
+                fullModuleName = "__addonName";
             }
             else {
-                this.result = `__addon.require("${moduleName}", {}, function(__exports)
-${this.result}end)
-`;
+                fullModuleName = `__addonName .. "/${this.sourceFile.moduleName}"`;
             }
-            this.result = `local __addonName, __addon = ...
-            ${this.result}`;
+            this.result = `local __addonName = ...
+local __exports = LibStub:NewLibrary(${fullModuleName}, ${this.moduleVersion})
+if not __exports then return end
+${this.result}`;
         }
         return this.result;
     }
@@ -482,9 +493,9 @@ ${this.result}end)
                 else if (identifier.text === "__args") {
                     this.result += "...";
                 }
-                else if (identifier.text === this.addonModule) {
-                    this.result += "...";
-                }
+                // else if (identifier.text === this.addonModule) {
+                //     this.result += "...";
+                // }
                 // else if (this.importedVariables[identifier.text]) {
                 //     this.result += this.importedVariables[identifier.text] + "." + identifier.text;
                 // }
@@ -648,7 +659,7 @@ ${this.result}end)
                         if (symbol !== undefined) {
                             isMethodCall = (symbol.getFlags() & ts.SymbolFlags.Method) > 0;
                         }
-                        else{
+                        else {
                             this.addTextError(node, "Unable to know the type of this expression");
                         }
                     }
@@ -777,18 +788,18 @@ ${this.result}end)
                 const variableStatement = <ts.VariableStatement>node;
                 this.writeTabs(tabs);
 
-                if (variableStatement.declarationList.declarations.length === 1) {
-                    const variableDeclaration = variableStatement.declarationList.declarations[0];
-                    if (variableDeclaration.initializer && variableDeclaration.initializer.kind === ts.SyntaxKind.Identifier) {
-                        const identifier = <ts.Identifier>variableDeclaration.initializer;
-                        if (identifier.text === this.addonModule) {
-                            const left = <ts.ArrayBindingPattern>variableDeclaration.name
-                            this.addonNameVariable = (<ts.BindingElement>left.elements[0]).name.getText();
-                            this.addonVariable = (<ts.BindingElement>left.elements[1]).name.getText();
-                            break;
-                        }
-                    }                    
-                }
+                // if (variableStatement.declarationList.declarations.length === 1) {
+                //     const variableDeclaration = variableStatement.declarationList.declarations[0];
+                //     if (variableDeclaration.initializer && variableDeclaration.initializer.kind === ts.SyntaxKind.Identifier) {
+                //         const identifier = <ts.Identifier>variableDeclaration.initializer;
+                //         if (identifier.text === this.addonModule) {
+                //             const left = <ts.ArrayBindingPattern>variableDeclaration.name
+                //             this.addonNameVariable = (<ts.BindingElement>left.elements[0]).name.getText();
+                //             this.addonVariable = (<ts.BindingElement>left.elements[1]).name.getText();
+                //             break;
+                //         }
+                //     }                    
+                // }
                 
                 if (this.hasExportModifier(variableStatement) && variableStatement.declarationList.declarations.every(x => x.initializer == undefined)) {
                     for (const declaration of variableStatement.declarationList.declarations) {

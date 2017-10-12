@@ -18,6 +18,21 @@ function reportDiagnostics(diagnostics: ts.Diagnostic[]): void {
 const configFileName = path.resolve(process.argv[2] || "C:\\Program Files (x86)\\World of Warcraft Public Test\\Interface\\AddOns\\Ovale\\tsconfig.json");
     // "d:/Applications/World of Warcraft/Interface/AddOns/Ovale/tsconfig.json"); 
 
+const packageFileName = configFileName.replace(/tsconfig\.json$/, "package.json");
+const packageFile = JSON.parse(fs.readFileSync(packageFileName).toString());
+const version: string = packageFile.version;
+const match = version.match(/(\d+)(?:\.(\d+))(?:\.(\d+))/);
+let major: string, minor:string, patch:string;
+let moduleVersion = 0;
+if (match) {
+    [major, minor, patch] = match;
+    moduleVersion = (parseInt(major) * 100 + parseInt(minor)) * 100 + parseInt(patch);
+}
+else {
+    console.error(`Can't parse package.json version number ${version}`);
+    process.exit(1);
+}
+
 const configJson = fs.readFileSync(configFileName).toString();
 const config = ts.parseConfigFileTextToJson(configFileName, configJson);
 if (config.error) {
@@ -63,7 +78,7 @@ else {
         const moduleName = getModuleName(sourceFile.fileName);
         sourceFile.moduleName = "./" + moduleName.replace("\\", "/");
 
-        const luaVisitor = new LuaVisitor(sourceFile, checker);
+        const luaVisitor = new LuaVisitor(sourceFile, checker, moduleVersion);
         luaVisitor.traverse(sourceFile, 0, undefined);
         const relativePath = moduleName + ".lua";
         const outputPath = path.join(outDir, relativePath);

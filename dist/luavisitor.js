@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const ts = require("typescript");
-const path = require("path");
 class LuaVisitor {
-    constructor(sourceFile, typeChecker) {
+    constructor(sourceFile, typeChecker, moduleVersion) {
         this.sourceFile = sourceFile;
         this.typeChecker = typeChecker;
+        this.moduleVersion = moduleVersion;
         this.result = "";
         this.imports = [];
         this.importedVariables = {};
@@ -28,20 +28,31 @@ class LuaVisitor {
             break;
         }
         if (hasExportedVariables) {
-            const moduleName = this.sourceFile.moduleName;
-            const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
-            if (this.imports.length > 0) {
-                this.result = `__addon.require("${moduleName}", { "${modules.join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
-${this.result}end)
-`;
+            //             const moduleName = this.sourceFile.moduleName;
+            //             const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
+            //             if (this.imports.length > 0) {
+            //                 this.result = `__addon.require("${moduleName}", { "${modules.join("\", \"")}" }, function(__exports, ${this.imports.map(x => x.variable).join(", ")})
+            // ${this.result}end)
+            // `;
+            //             }
+            //             else {
+            //                 this.result = `__addon.require("${moduleName}", {}, function(__exports)
+            // ${this.result}end)
+            // `;
+            //             }
+            //             this.result = `local __addonName, __addon = ...
+            //             ${this.result}`;
+            let fullModuleName;
+            if (this.sourceFile.moduleName === "index") {
+                fullModuleName = "__addonName";
             }
             else {
-                this.result = `__addon.require("${moduleName}", {}, function(__exports)
-${this.result}end)
-`;
+                fullModuleName = `__addonName .. "/${this.sourceFile.moduleName}"`;
             }
-            this.result = `local __addonName, __addon = ...
-            ${this.result}`;
+            this.result = `local __addonName = ...
+local __exports = LibStub:NewLibrary(${fullModuleName}, ${this.moduleVersion})
+if not __exports then return end
+${this.result}`;
         }
         return this.result;
     }
@@ -468,9 +479,6 @@ ${this.result}end)
                 else if (identifier.text === "__args") {
                     this.result += "...";
                 }
-                else if (identifier.text === this.addonModule) {
-                    this.result += "...";
-                }
                 else {
                     if (this.typeChecker) {
                         const symbol = this.typeChecker.getSymbolAtLocation(node);
@@ -758,18 +766,18 @@ ${this.result}end)
             case ts.SyntaxKind.VariableStatement:
                 const variableStatement = node;
                 this.writeTabs(tabs);
-                if (variableStatement.declarationList.declarations.length === 1) {
-                    const variableDeclaration = variableStatement.declarationList.declarations[0];
-                    if (variableDeclaration.initializer && variableDeclaration.initializer.kind === ts.SyntaxKind.Identifier) {
-                        const identifier = variableDeclaration.initializer;
-                        if (identifier.text === this.addonModule) {
-                            const left = variableDeclaration.name;
-                            this.addonNameVariable = left.elements[0].name.getText();
-                            this.addonVariable = left.elements[1].name.getText();
-                            break;
-                        }
-                    }
-                }
+                // if (variableStatement.declarationList.declarations.length === 1) {
+                //     const variableDeclaration = variableStatement.declarationList.declarations[0];
+                //     if (variableDeclaration.initializer && variableDeclaration.initializer.kind === ts.SyntaxKind.Identifier) {
+                //         const identifier = <ts.Identifier>variableDeclaration.initializer;
+                //         if (identifier.text === this.addonModule) {
+                //             const left = <ts.ArrayBindingPattern>variableDeclaration.name
+                //             this.addonNameVariable = (<ts.BindingElement>left.elements[0]).name.getText();
+                //             this.addonVariable = (<ts.BindingElement>left.elements[1]).name.getText();
+                //             break;
+                //         }
+                //     }                    
+                // }
                 if (this.hasExportModifier(variableStatement) && variableStatement.declarationList.declarations.every(x => x.initializer == undefined)) {
                     for (const declaration of variableStatement.declarationList.declarations) {
                         this.exportedVariables[declaration.name.getText()] = true;

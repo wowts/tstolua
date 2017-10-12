@@ -21,7 +21,7 @@ function testTransform(t, source) {
     sourceFile.moduleName = "source";
     //const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, false);
     // TODO how to create the type checker without the program or how to create a program from a source file?
-    const visitor = new luavisitor_1.LuaVisitor(sourceFile, program.getTypeChecker());
+    const visitor = new luavisitor_1.LuaVisitor(sourceFile, program.getTypeChecker(), 1);
     visitor.traverse(sourceFile, 0, undefined);
     fs.unlinkSync(fileName);
     return visitor.getResult();
