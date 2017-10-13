@@ -91,6 +91,8 @@ if not __exports then return end
     
             for (const imp of this.imports) {
                 let moduleVariableName: string;
+                if (imp.variables && imp.variables.every(x => x.usages == 0)) continue;
+
                 if (globalModules[imp.module] === undefined) {
                     moduleVariableName = imp.variable || "__" + imp.module.replace(/^@\w+\//,"").replace(/[^\w]/g, "")
                     let fullModuleName;
