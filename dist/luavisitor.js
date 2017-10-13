@@ -31,6 +31,7 @@ class LuaVisitor {
         this.exports = [];
         this.errors = [];
         this.needClass = false;
+        this.importedVariables = {};
         if (typeChecker) {
             const currentModule = typeChecker.getSymbolAtLocation(sourceFile);
             if (currentModule) {
@@ -76,8 +77,9 @@ if not __exports then return end
                 prehambule += "local __class = LibStub:GetLibrary(\"tslib\").newClass\n";
             }
             for (const imp of this.imports) {
-                const moduleVariableName = imp.variable || "__" + imp.module.replace("@wowts/", "").replace(/[^\w]/g, "");
-                if (globalModules[imp.module] === undefined || globalModules[imp.module] === ModuleType.WithObject) {
+                let moduleVariableName;
+                if (globalModules[imp.module] === undefined) {
+                    moduleVariableName = imp.variable || "__" + imp.module.replace(/^@\w+\//, "").replace(/[^\w]/g, "");
                     let fullModuleName;
                     if (imp.module.indexOf(".") == 0) {
                         fullModuleName = path.join(path.dirname(this.sourceFile.fileName), imp.module).replace(/\\/g, "/");
@@ -90,7 +92,7 @@ if not __exports then return end
                         prehambule += `local ${moduleVariableName} = LibStub:GetLibrary("${fullModuleName}")\n`;
                     }
                     else {
-                        let moduleName = imp.module;
+                        let moduleName = imp.module.replace(/^@\w+\//, "");
                         if (moduleName.indexOf("_") >= 0) {
                             moduleName = moduleName.replace(/_(\w)/g, (_, x) => x.toUpperCase());
                             moduleName = moduleName.replace(/^\w/, x => x.toUpperCase());
@@ -104,13 +106,17 @@ if not __exports then return end
                         }
                     }
                 }
+                else {
+                    moduleVariableName = imp.module.replace(/^@\w+\//, "");
+                }
                 if (imp.variables) {
-                    for (const variable of imp.variables) {
+                    // Count usages because couldn't find how to filter out Interfaces or this kind of symbols
+                    for (const variable of imp.variables.filter(x => x.usages > 0)) {
                         if (globalModules[imp.module] === ModuleType.WithoutObject) {
-                            prehambule += `local ${variable} = ${variable}\n`;
+                            prehambule += `local ${variable.name} = ${variable.name}\n`;
                         }
                         else {
-                            prehambule += `local ${variable} = ${moduleVariableName}.${variable}\n`;
+                            prehambule += `local ${variable.name} = ${moduleVariableName}.${variable.name}\n`;
                         }
                     }
                 }
@@ -552,9 +558,9 @@ if not __exports then return end
                                 this.result += "__exports.";
                             }
                             this.typeChecker.getRootSymbols(symbol);
-                            // if ((symbol.flags & ts.SymbolFlags.AliasExcludes) && this.importedVariables[identifier.text]) {
-                            //     this.result += this.importedVariables[identifier.text] + ".";
-                            // }
+                            if ((symbol.flags & ts.SymbolFlags.AliasExcludes) && this.importedVariables[identifier.text]) {
+                                this.importedVariables[identifier.text].usages++;
+                            }
                         }
                     }
                     if (options && options.export)
@@ -610,7 +616,9 @@ if not __exports then return end
                         this.imports.push({ module: module.text, variables: variables });
                         const namedImports = importDeclaration.importClause.namedBindings;
                         for (const variable of namedImports.elements) {
-                            variables.push(variable.name.text);
+                            const description = { name: variable.name.text, usages: 0 };
+                            variables.push(description);
+                            this.importedVariables[description.name] = description;
                         }
                     }
                 }

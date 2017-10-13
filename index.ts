@@ -125,7 +125,6 @@ else {
         }
     }
 
-    // https://en.wikipedia.org/wiki/Topological_sorting
     while (sources.length > 0) {
         const source = sources.pop();
         if (!source) break;

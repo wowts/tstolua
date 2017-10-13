@@ -282,9 +282,7 @@ ava_1.test("imports mock modules", t => {
 import { c } from "@wowts/lua";
 const z = a;
 c();
-    `), `local __table = LibStub:GetLibrary("@wowts/table")
-local a = __table.a
-local b = __table.b
+    `), `local a = table.a
 local c = c
 local z = a
 c()
