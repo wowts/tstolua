@@ -84,7 +84,8 @@ else {
     }
 
     for (const sourceFile of program.getSourceFiles()) {
-        if (sourceFile.isDeclarationFile || sourceFile.fileName.match(/wow\.ts$/)) continue; // TODO until it's in a package
+        if (sourceFile.isDeclarationFile) continue;
+        if (!parsedConfig.fileNames.some(x => x === sourceFile.fileName)) continue;
         const moduleName = getModuleName(sourceFile.fileName);
         sourceFile.moduleName = "./" + moduleName.replace("\\", "/");
 
