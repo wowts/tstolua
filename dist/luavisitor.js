@@ -115,10 +115,10 @@ if not __exports then return end
                     // Count usages because couldn't find how to filter out Interfaces or this kind of symbols
                     for (const variable of imp.variables.filter(x => x.usages > 0)) {
                         if (globalModules[imp.module] === ModuleType.WithoutObject) {
-                            prehambule += `local ${variable.name} = ${variable.name}\n`;
+                            prehambule += `local ${variable.alias} = ${variable.name}\n`;
                         }
                         else {
-                            prehambule += `local ${variable.name} = ${moduleVariableName}.${variable.name}\n`;
+                            prehambule += `local ${variable.alias} = ${moduleVariableName}.${variable.name}\n`;
                         }
                     }
                 }
@@ -511,6 +511,8 @@ if not __exports then return end
             case ts.SyntaxKind.FunctionDeclaration:
                 {
                     const functionDeclaration = node;
+                    if (!functionDeclaration.body)
+                        break;
                     const isExport = this.writeLocalOrExport(functionDeclaration);
                     if (functionDeclaration.name) {
                         if (!isExport)
@@ -618,9 +620,10 @@ if not __exports then return end
                         this.imports.push({ module: module.text, variables: variables });
                         const namedImports = importDeclaration.importClause.namedBindings;
                         for (const variable of namedImports.elements) {
-                            const description = { name: variable.name.text, usages: 0 };
+                            const propertyName = variable.propertyName;
+                            const description = { name: propertyName ? propertyName.text : variable.name.text, usages: 0, alias: variable.name.text };
                             variables.push(description);
-                            this.importedVariables[description.name] = description;
+                            this.importedVariables[description.alias] = description;
                         }
                     }
                 }
