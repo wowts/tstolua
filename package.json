@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "./dist/index.js",
   "bin": {
-    "tstuloa": "./bin/tstolua"
+    "tstolua": "./bin/tstolua"
   },
   "license": "MIT",
   "author": {

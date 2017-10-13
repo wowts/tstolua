@@ -84,6 +84,7 @@ else {
             allSources.set(moduleName, source);
         }
         const modules = sourceFile.resolvedModules;
+        let hasDependencies = false;
         if (modules) {
             for (const [key, value] of modules.entries()) {
                 if (value && !value.isExternalLibraryImport) {
@@ -95,10 +96,11 @@ else {
                     }
                     otherSource.referencedBy.push(source);
                     source.references.push(otherSource);
+                    hasDependencies = true;
                 }
             }
         }
-        else {
+        if (!hasDependencies) {
             sources.push(source);
         }
     }
