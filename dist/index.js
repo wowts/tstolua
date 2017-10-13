@@ -4,6 +4,7 @@ const ts = require("typescript");
 const fs = require("fs");
 const luavisitor_1 = require("./luavisitor");
 const path = require("path");
+const commander_1 = require("commander");
 function reportDiagnostics(diagnostics) {
     diagnostics.forEach(diagnostic => {
         let message = "Error";
@@ -15,7 +16,10 @@ function reportDiagnostics(diagnostics) {
         console.error(message);
     });
 }
-const configFileName = path.resolve(process.argv[2] || "./tsconfig.json");
+const options = commander_1.option("-j, --js", "Emit javascript")
+    .option("-p, --project [tsconfig.json", "tsproject.json path", "./tsconfig.json")
+    .parse(process.argv);
+const configFileName = path.resolve(options.project);
 const packageFileName = configFileName.replace(/tsconfig\.json$/, "package.json");
 const packageFile = JSON.parse(fs.readFileSync(packageFileName).toString());
 const version = packageFile.version;
@@ -55,6 +59,9 @@ if (!outDir) {
     process.exit(1);
 }
 else {
+    if (options.js) {
+        program.emit();
+    }
     const sortedSources = [];
     const sources = [];
     const allSources = new Map();

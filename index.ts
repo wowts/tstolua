@@ -2,6 +2,7 @@ import * as ts from "typescript";
 import * as fs from "fs";
 import { LuaVisitor } from "./luavisitor";
 import * as path from "path";
+import { option } from "commander";
 
 function reportDiagnostics(diagnostics: ts.Diagnostic[]): void {
     diagnostics.forEach(diagnostic => {
@@ -15,7 +16,11 @@ function reportDiagnostics(diagnostics: ts.Diagnostic[]): void {
     });
 }
 
-const configFileName = path.resolve(process.argv[2] || "./tsconfig.json");
+const options = option("-j, --js", "Emit javascript")
+    .option("-p, --project [tsconfig.json", "tsproject.json path", "./tsconfig.json")
+    .parse(process.argv);
+
+const configFileName = path.resolve(options.project);
     
 const packageFileName = configFileName.replace(/tsconfig\.json$/, "package.json");
 const packageFile = JSON.parse(fs.readFileSync(packageFileName).toString());
@@ -59,6 +64,10 @@ if (!outDir) {
     process.exit(1);
 }
 else { 
+    if (options.js) {
+        program.emit();
+    }
+
     interface Source {
         name: string;
         references: Source[];
