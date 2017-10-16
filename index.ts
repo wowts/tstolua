@@ -1,6 +1,6 @@
 import * as ts from "typescript";
 import * as fs from "fs";
-import { LuaVisitor } from "./luavisitor";
+import { LuaVisitor, getAppName } from "./luavisitor";
 import * as path from "path";
 import { option } from "commander";
 
@@ -36,8 +36,7 @@ else {
     console.error(`Can't parse package.json version number ${version}`);
     process.exit(1);
 }
-let appName: string = packageFile.name;
-appName = appName.replace(/^@.*\//, "");
+let appName: string = getAppName(packageFile.name);
 
 const configJson = fs.readFileSync(configFileName).toString();
 const config = ts.parseConfigFileTextToJson(configFileName, configJson);

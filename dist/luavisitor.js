@@ -2,6 +2,16 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const ts = require("typescript");
 const path = require("path");
+/** Remove the team's name, and transform to PascalCase if there is a _ in the name */
+function getAppName(input) {
+    let moduleName = input.replace(/^@\w+\//, "");
+    if (moduleName.indexOf("_") >= 0) {
+        moduleName = moduleName.replace(/_(\w)/g, (_, x) => x.toUpperCase());
+        moduleName = moduleName.replace(/^\w/, x => x.toUpperCase());
+    }
+    return moduleName;
+}
+exports.getAppName = getAppName;
 var ModuleType;
 (function (ModuleType) {
     ModuleType[ModuleType["WithoutObject"] = 0] = "WithoutObject";
@@ -26,6 +36,7 @@ class LuaVisitor {
         this.imports = [];
         // private importedVariables: {[name:string]: string} = {};
         this.exportedVariables = {};
+        this.hasExportDefault = false;
         this.classDeclarations = [];
         this.currentClassDeclaration = undefined;
         this.exports = [];
@@ -40,7 +51,7 @@ class LuaVisitor {
         }
     }
     getResult() {
-        let hasExportedVariables = false;
+        let hasExportedVariables = this.hasExportDefault;
         for (const key in this.exportedVariables) {
             hasExportedVariables = true;
             break;
@@ -94,11 +105,7 @@ if not __exports then return end
                         prehambule += `local ${moduleVariableName} = LibStub:GetLibrary("${fullModuleName}")\n`;
                     }
                     else {
-                        let moduleName = imp.module.replace(/^@\w+\//, "");
-                        if (moduleName.indexOf("_") >= 0) {
-                            moduleName = moduleName.replace(/_(\w)/g, (_, x) => x.toUpperCase());
-                            moduleName = moduleName.replace(/^\w/, x => x.toUpperCase());
-                        }
+                        let moduleName = getAppName(imp.module);
                         fullModuleName = `"${moduleName}"`;
                         if (globalModules[imp.module] === ModuleType.WithObject) {
                             prehambule += `local ${moduleVariableName} = LibStub:GetLibrary(${fullModuleName})\n`;
@@ -426,6 +433,16 @@ if not __exports then return end
                 break;
             case ts.SyntaxKind.EndOfFileToken:
                 break;
+            case ts.SyntaxKind.ExportAssignment:
+                {
+                    const exportAssignment = node;
+                    this.writeTabs(tabs);
+                    this.result += "for k,v in pairs(";
+                    this.traverse(exportAssignment.expression, tabs, node);
+                    this.result += ") do __export[k] = v end\n";
+                    this.hasExportDefault = true;
+                    break;
+                }
             case ts.SyntaxKind.ExpressionStatement:
                 this.writeTabs(tabs);
                 this.traverse(node.expression, tabs, node);

@@ -34,8 +34,7 @@ else {
     console.error(`Can't parse package.json version number ${version}`);
     process.exit(1);
 }
-let appName = packageFile.name;
-appName = appName.replace(/^@.*\//, "");
+let appName = luavisitor_1.getAppName(packageFile.name);
 const configJson = fs.readFileSync(configFileName).toString();
 const config = ts.parseConfigFileTextToJson(configFileName, configJson);
 if (config.error) {
