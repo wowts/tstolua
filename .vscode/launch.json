@@ -8,7 +8,7 @@
                 "program": "${workspaceRoot}/index.ts",
                 "args": [
                     "-p",
-                    "../ace_comm-3.0/tsconfig.json"
+                    "../ace_config_dialog-3.0/tsconfig.json"
                 ],
                 "outFiles": [
                     "${workspaceRoot}/dist/**/*.js"

@@ -152,6 +152,44 @@ if not __exports then return end
             this.traverse(array[i], tabs, parent, options);
         }
     }
+    writeClassMembers(members, tabs, node) {
+        if (!this.currentClassDeclaration)
+            throw Error("this.currentClassDeclaration must be defined");
+        let constructorFound = false;
+        let propertyFound = false;
+        for (const member of members) {
+            if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
+                if (member.initializer != undefined)
+                    propertyFound = true;
+                continue;
+            }
+            if (member.kind === ts.SyntaxKind.Constructor) {
+                constructorFound = true;
+            }
+            this.traverse(member, tabs, node);
+        }
+        if (propertyFound && !constructorFound) {
+            this.writeTabs(tabs);
+            if (this.currentClassDeclaration.heritageClauses) {
+                this.result += "constructor = function(self, ...)\n";
+                this.writeTabs(tabs + 1);
+                this.writeHeritage(this.currentClassDeclaration, tabs, node);
+                this.result += ".constructor(...)\n";
+            }
+            else {
+                this.result += " constructor = function(self)\n";
+            }
+            for (const member of members) {
+                if (member.kind !== ts.SyntaxKind.PropertyDeclaration) {
+                    if (member.initializer === undefined)
+                        continue;
+                }
+                this.traverse(member, tabs + 1, node);
+            }
+            this.writeTabs(tabs);
+            this.result += "end\n";
+        }
+    }
     traverse(node, tabs, parent, options) {
         node.parent = parent;
         switch (node.kind) {
@@ -301,32 +339,7 @@ if not __exports then return end
                         this.result += "nil";
                     }
                     this.result += ", {\n";
-                    let constructorFound = false;
-                    let propertyFound = false;
-                    for (const member of classExpression.members) {
-                        if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
-                            if (member.initializer != undefined)
-                                propertyFound = true;
-                            continue;
-                        }
-                        if (member.kind === ts.SyntaxKind.Constructor) {
-                            constructorFound = true;
-                        }
-                        this.traverse(member, tabs + 1, node);
-                    }
-                    if (propertyFound && !constructorFound) {
-                        this.writeTabs(tabs + 1);
-                        this.result += "constructor = function(self)\n";
-                        for (const member of classExpression.members) {
-                            if (member.kind !== ts.SyntaxKind.PropertyDeclaration) {
-                                if (member.initializer === undefined)
-                                    continue;
-                            }
-                            this.traverse(member, tabs + 2, node);
-                        }
-                        this.writeTabs(tabs + 1);
-                        this.result += "end\n";
-                    }
+                    this.writeClassMembers(classExpression.members, tabs + 1, node);
                     if (this.classDeclarations.length > 0) {
                         this.currentClassDeclaration = this.classDeclarations.pop();
                     }
@@ -353,11 +366,7 @@ if not __exports then return end
                         this.result += "nil";
                     }
                     this.result += ", {\n";
-                    for (const member of classExpression.members) {
-                        if (member.kind === ts.SyntaxKind.PropertyDeclaration)
-                            continue;
-                        this.traverse(member, tabs + 1, node);
-                    }
+                    this.writeClassMembers(classExpression.members, tabs + 1, node);
                     this.writeTabs(tabs);
                     this.result += "})";
                     if (this.classDeclarations.length > 0) {
