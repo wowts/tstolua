@@ -455,7 +455,7 @@ if not __exports then return end
                     this.writeTabs(tabs);
                     this.result += "for k,v in pairs(";
                     this.traverse(exportAssignment.expression, tabs, node);
-                    this.result += ") do __export[k] = v end\n";
+                    this.result += ") do __exports[k] = v end\n";
                     this.hasExportDefault = true;
                     break;
                 }
