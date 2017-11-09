@@ -10,8 +10,8 @@
     "name": "Sidoine De Wispelaere"
   },
   "scripts": {
-    "prepublish": "tsc -p .",
-    "prepublish:watch": "tsc -w -p .",
+    "prepare": "tsc -p .",
+    "prepare:watch": "tsc -w -p .",
     "test": "ava dist/tests",
     "test:watch": "ava --watch dist/tests",
     "test:debug": "node node_modules/ava/profile.js dist/tests"

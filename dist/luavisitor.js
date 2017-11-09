@@ -2,10 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const ts = require("typescript");
 const path = require("path");
+const typescript_1 = require("typescript");
 /** Remove the team's name, and transform to PascalCase if there is a _ in the name */
 function getAppName(input) {
     let moduleName = input.replace(/^@\w+\//, "");
     if (moduleName.indexOf("_") >= 0) {
+        moduleName = moduleName.replace(/_db/g, "DB");
+        moduleName = moduleName.replace(/_gui/g, "GUI");
         moduleName = moduleName.replace(/_(\w)/g, (_, x) => x.toUpperCase());
         moduleName = moduleName.replace(/^\w/, x => x.toUpperCase());
     }
@@ -27,11 +30,12 @@ const globalModules = {
     ["@wowts/lua"]: ModuleType.WithoutObject,
 };
 class LuaVisitor {
-    constructor(sourceFile, typeChecker, moduleVersion, appName) {
+    constructor(sourceFile, typeChecker, moduleVersion, appName, rootDir) {
         this.sourceFile = sourceFile;
         this.typeChecker = typeChecker;
         this.moduleVersion = moduleVersion;
         this.appName = appName;
+        this.rootDir = rootDir;
         this.result = "";
         this.imports = [];
         // private importedVariables: {[name:string]: string} = {};
@@ -95,7 +99,7 @@ if not __exports then return end
                     moduleVariableName = imp.variable || "__" + imp.module.replace(/^@\w+\//, "").replace(/[^\w]/g, "");
                     let fullModuleName;
                     if (imp.module.indexOf(".") == 0) {
-                        fullModuleName = path.join(path.dirname(this.sourceFile.fileName), imp.module).replace(/\\/g, "/");
+                        fullModuleName = path.join(path.dirname(this.sourceFile.fileName), imp.module).replace(this.rootDir, "").replace(/\\/g, "/").replace(/^\//, "");
                         if (fullModuleName === "index") {
                             fullModuleName = this.appName;
                         }
@@ -170,14 +174,14 @@ if not __exports then return end
         }
         if (propertyFound && !constructorFound) {
             this.writeTabs(tabs);
-            if (this.currentClassDeclaration.heritageClauses) {
+            if (this.currentClassDeclaration.heritageClauses && this.currentClassDeclaration.heritageClauses.find(x => x.token === ts.SyntaxKind.ExtendsKeyword)) {
                 this.result += "constructor = function(self, ...)\n";
                 this.writeTabs(tabs + 1);
                 this.writeHeritage(this.currentClassDeclaration, tabs, node);
-                this.result += ".constructor(...)\n";
+                this.result += ".constructor(self, ...)\n";
             }
             else {
-                this.result += " constructor = function(self)\n";
+                this.result += "constructor = function(self)\n";
             }
             for (const member of members) {
                 if (member.kind !== ts.SyntaxKind.PropertyDeclaration) {
@@ -264,8 +268,17 @@ if not __exports then return end
                         this.result += " % ";
                         break;
                     case ts.SyntaxKind.PlusToken:
-                        this.result += " + ";
-                        break;
+                        {
+                            const leftType = this.typeChecker.getTypeAtLocation(binary.left);
+                            const rightType = this.typeChecker.getTypeAtLocation(binary.right);
+                            if ((leftType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) || (rightType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral))) {
+                                this.result += " .. ";
+                            }
+                            else {
+                                this.result += " + ";
+                            }
+                            break;
+                        }
                     case ts.SyntaxKind.SlashToken:
                         this.result += " / ";
                         break;
@@ -298,23 +311,29 @@ if not __exports then return end
                 this.result += "break\n";
                 break;
             case ts.SyntaxKind.CallExpression:
-                const callExpression = node;
-                if (callExpression.expression.getText() === "lualength") {
-                    this.result += "#";
-                    this.writeArray(callExpression.arguments, tabs, node);
-                }
-                else {
-                    this.traverse(callExpression.expression, tabs, node, { callee: true });
-                    this.result += "(";
-                    if (callExpression.expression.kind === ts.SyntaxKind.SuperKeyword) {
-                        this.result += "self";
-                        if (callExpression.arguments.length)
-                            this.result += ", ";
+                {
+                    const callExpression = node;
+                    const text = callExpression.expression.getText();
+                    if (text === "lualength") {
+                        this.result += "#";
+                        this.writeArray(callExpression.arguments, tabs, node);
                     }
-                    this.writeArray(callExpression.arguments, tabs, node);
-                    this.result += ")";
+                    else if (text === "truthy") {
+                        this.writeArray(callExpression.arguments, tabs, node);
+                    }
+                    else {
+                        this.traverse(callExpression.expression, tabs, node, { callee: true });
+                        this.result += "(";
+                        if (callExpression.expression.kind === ts.SyntaxKind.SuperKeyword) {
+                            this.result += "self";
+                            if (callExpression.arguments.length)
+                                this.result += ", ";
+                        }
+                        this.writeArray(callExpression.arguments, tabs, node);
+                        this.result += ")";
+                    }
+                    break;
                 }
-                break;
             case ts.SyntaxKind.ClassDeclaration:
                 {
                     const classExpression = node;
@@ -644,12 +663,18 @@ if not __exports then return end
                         // const moduleName =  "__" + module.text.replace(/[^\w]/g, "");
                         const variables = [];
                         this.imports.push({ module: module.text, variables: variables });
-                        const namedImports = importDeclaration.importClause.namedBindings;
-                        for (const variable of namedImports.elements) {
-                            const propertyName = variable.propertyName;
-                            const description = { name: propertyName ? propertyName.text : variable.name.text, usages: 0, alias: variable.name.text };
-                            variables.push(description);
-                            this.importedVariables[description.alias] = description;
+                        const importClauseNamedBindings = importDeclaration.importClause.namedBindings;
+                        if (typescript_1.isNamedImports(importClauseNamedBindings)) {
+                            const namedImports = importClauseNamedBindings;
+                            for (const variable of namedImports.elements) {
+                                const propertyName = variable.propertyName;
+                                const description = { name: propertyName ? propertyName.text : variable.name.text, usages: 0, alias: variable.name.text };
+                                variables.push(description);
+                                this.importedVariables[description.alias] = description;
+                            }
+                        }
+                        else {
+                            this.addError(importClauseNamedBindings);
                         }
                     }
                 }
@@ -776,6 +801,14 @@ if not __exports then return end
                         this.traverse(propertyDeclaration.initializer, tabs, node);
                         this.result += "\n";
                     }
+                    break;
+                }
+            case ts.SyntaxKind.RegularExpressionLiteral:
+                {
+                    const regularExpressionLiteral = node;
+                    this.result += "Regex(";
+                    this.writeQuotedString(regularExpressionLiteral.text);
+                    this.result += ")";
                     break;
                 }
             case ts.SyntaxKind.ReturnStatement:

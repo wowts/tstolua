@@ -22,7 +22,7 @@ const options = option("-j, --js", "Emit javascript")
 
 const configFileName = path.resolve(options.project);
     
-const packageFileName = configFileName.replace(/tsconfig\.json$/, "package.json");
+const packageFileName = path.join(path.dirname(configFileName), "package.json");
 const packageFile = JSON.parse(fs.readFileSync(packageFileName).toString());
 const version: string = packageFile.version;
 const match = version.match(/(\d+)(?:\.(\d+))(?:\.(\d+))/);
@@ -88,7 +88,7 @@ else {
         const moduleName = getModuleName(sourceFile.fileName);
         sourceFile.moduleName = "./" + moduleName.replace("\\", "/");
 
-        const luaVisitor = new LuaVisitor(sourceFile, checker, appVersion, appName);
+        const luaVisitor = new LuaVisitor(sourceFile, checker, appVersion, appName, rootDir);
         luaVisitor.traverse(sourceFile, 0, undefined);
         const relativePath = moduleName + ".lua";
         const outputPath = path.join(outDir, relativePath);

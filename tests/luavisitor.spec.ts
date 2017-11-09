@@ -19,7 +19,7 @@ function testTransform(t:TestContext, source: string) {
     sourceFile.moduleName = "./source";
     //const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, false);
     // TODO how to create the type checker without the program or how to create a program from a source file?
-    const visitor = new LuaVisitor(sourceFile, program.getTypeChecker(), 1, "test");
+    const visitor = new LuaVisitor(sourceFile, program.getTypeChecker(), 1, "test", "");
     visitor.traverse(sourceFile, 0, undefined);
     fs.unlinkSync(fileName);
     return visitor.getResult();
@@ -310,5 +310,35 @@ c();
 local c = c
 local z = a
 c()
+`);
+});
+
+test("class with inheritance but no explicit constructor",  t => {
+    t.is(testTransform(t, `class Test extends BaseClass {
+    v = true
+}`), `local __class = LibStub:GetLibrary("tslib").newClass
+local Test = __class(BaseClass, {
+    constructor = function(self, ...)
+        BaseClass.constructor(self, ...)
+        self.v = true
+    end
+})
+`);
+});
+
+test("class with interface inheritance but no explicit constructor",  t => {
+    t.is(testTransform(t, `class Test implements Interface {
+    v = true
+}`), `local __class = LibStub:GetLibrary("tslib").newClass
+local Test = __class(nil, {
+    constructor = function(self)
+        self.v = true
+    end
+})
+`);
+});
+
+test("add strings", t => {
+    t.is(testTransform(t, `"a" + 3`), `"a" .. 3
 `);
 });

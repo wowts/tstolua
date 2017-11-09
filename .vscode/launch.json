@@ -8,7 +8,7 @@
                 "program": "${workspaceRoot}/index.ts",
                 "args": [
                     "-p",
-                    "../ace_config_dialog-3.0/tsconfig.json"
+                    "C:\\Program Files (x86)\\World of Warcraft Public Test\\Interface\\AddOns\\Ovale/tsconfig.json"
                 ],
                 "outFiles": [
                     "${workspaceRoot}/dist/**/*.js"
