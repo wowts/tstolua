@@ -4,7 +4,7 @@ import { LuaVisitor, getAppName } from "./luavisitor";
 import * as path from "path";
 import { option } from "commander";
 
-function reportDiagnostics(diagnostics: ts.Diagnostic[]): void {
+function reportDiagnostics(diagnostics: ReadonlyArray<ts.Diagnostic>): void {
     diagnostics.forEach(diagnostic => {
         let message = "Error";
         if (diagnostic.file && diagnostic.start) {
