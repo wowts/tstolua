@@ -180,7 +180,13 @@ if not __exports then return end
         let propertyFound = false;
         for (const member of members) {
             if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
-                if ((<ts.PropertyDeclaration>member).initializer != undefined) propertyFound = true;
+                const propertyDeclaration = <ts.PropertyDeclaration>member;
+                if (propertyDeclaration.modifiers && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword)) {
+                    if (propertyDeclaration.initializer !== undefined) this.traverse(member, tabs, node);
+                    continue;
+                }
+
+                if (propertyDeclaration.initializer != undefined) propertyFound = true;
                 continue;
             }
             if (member.kind === ts.SyntaxKind.Constructor) {
@@ -200,10 +206,12 @@ if not __exports then return end
                 this.result += "constructor = function(self)\n";
             }
             for (const member of members) {
-                if (member.kind !== ts.SyntaxKind.PropertyDeclaration) {
-                    if ((<ts.PropertyDeclaration>member).initializer === undefined) continue;
+                if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
+                    const propertyDeclaration = <ts.PropertyDeclaration>member;
+                    if (propertyDeclaration.modifiers && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword)) continue;
+                    if (propertyDeclaration.initializer === undefined) continue;
+                    this.traverse(member, tabs + 1, node);
                 }
-                this.traverse(member, tabs + 1, node);
             }
             this.writeTabs(tabs);
             this.result += "end\n"
@@ -436,6 +444,9 @@ if not __exports then return end
                     if (constr.parent) {
                         for (const member of constr.parent.members) {
                             if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
+                                const propertyDeclaration = <ts.PropertyDeclaration>member;
+                                if (propertyDeclaration.initializer === undefined) continue;
+                                if (propertyDeclaration.modifiers !== undefined && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword)) continue;
                                 this.traverse(member, tabs + 1, constr.parent);
                             }
                         }
@@ -822,10 +833,12 @@ if not __exports then return end
                     const propertyDeclaration = <ts.PropertyDeclaration>node;
                     if (propertyDeclaration.initializer) {
                         this.writeTabs(tabs);
-                        this.result += "self.";
+                        const staticProperty = propertyDeclaration.modifiers && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword);
+                        if (!staticProperty) this.result += "self.";
                         this.traverse(propertyDeclaration.name, tabs, node);
                         this.result += " = ";
                         this.traverse(propertyDeclaration.initializer, tabs, node);
+                        if (staticProperty) this.result +=",";
                         this.result += "\n";
                     }
                     break;

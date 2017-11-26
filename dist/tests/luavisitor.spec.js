@@ -315,4 +315,34 @@ ava_1.test("add strings", t => {
     t.is(testTransform(t, `"a" + 3`), `"a" .. 3
 `);
 });
+ava_1.test("class with static property", t => {
+    t.is(testTransform(t, `class Test {
+    static v = true;
+    static x = 2;
+    static w;
+}`), `local __class = LibStub:GetLibrary("tslib").newClass
+local Test = __class(nil, {
+    v = true,
+    x = 2,
+})
+`);
+});
+ava_1.test("class with static property and constructor", t => {
+    t.is(testTransform(t, `class Test {
+    static v = true;
+    static x = 2;
+    static w;
+    constructor() {
+        let a = 2;
+    }
+}`), `local __class = LibStub:GetLibrary("tslib").newClass
+local Test = __class(nil, {
+    v = true,
+    x = 2,
+    constructor = function(self)
+        local a = 2
+    end,
+})
+`);
+});
 //# sourceMappingURL=luavisitor.spec.js.map
