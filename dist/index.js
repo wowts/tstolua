@@ -5,6 +5,7 @@ const fs = require("fs");
 const luavisitor_1 = require("./luavisitor");
 const path = require("path");
 const commander_1 = require("commander");
+const package_extra_1 = require("./package-extra");
 function reportDiagnostics(diagnostics) {
     diagnostics.forEach(diagnostic => {
         let message = "Error";
@@ -34,7 +35,7 @@ else {
     console.error(`Can't parse package.json version number ${version}`);
     process.exit(1);
 }
-let appName = luavisitor_1.getAppName(packageFile.name);
+let appName = package_extra_1.getAppName(packageFile.name);
 const configJson = fs.readFileSync(configFileName).toString();
 const config = ts.parseConfigFileTextToJson(configFileName, configJson);
 if (config.error) {
@@ -69,6 +70,7 @@ else {
     function getModuleName(fullPath) {
         return path.normalize(fullPath).replace(rootDir, "").replace(/^[\\/]/, "").replace(/\.ts$/, "");
     }
+    const packageExtras = new package_extra_1.PackageExtras();
     for (const sourceFile of program.getSourceFiles()) {
         if (sourceFile.isDeclarationFile)
             continue;
@@ -76,7 +78,7 @@ else {
             continue;
         const moduleName = getModuleName(sourceFile.fileName);
         sourceFile.moduleName = "./" + moduleName.replace("\\", "/");
-        const luaVisitor = new luavisitor_1.LuaVisitor(sourceFile, checker, appVersion, appName, rootDir);
+        const luaVisitor = new luavisitor_1.LuaVisitor(sourceFile, checker, appVersion, appName, rootDir, packageExtras);
         luaVisitor.traverse(sourceFile, 0, undefined);
         const relativePath = moduleName + ".lua";
         const outputPath = path.join(outDir, relativePath);

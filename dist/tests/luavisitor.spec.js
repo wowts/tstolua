@@ -4,6 +4,7 @@ const ava_1 = require("ava");
 const ts = require("typescript");
 const luavisitor_1 = require("../luavisitor");
 const fs = require("fs");
+const package_extra_1 = require("../package-extra");
 let i = 0;
 if (!fs.existsSync("testfiles"))
     fs.mkdirSync("testfiles");
@@ -21,7 +22,7 @@ function testTransform(t, source) {
     sourceFile.moduleName = "./source";
     //const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, false);
     // TODO how to create the type checker without the program or how to create a program from a source file?
-    const visitor = new luavisitor_1.LuaVisitor(sourceFile, program.getTypeChecker(), 1, "test", "");
+    const visitor = new luavisitor_1.LuaVisitor(sourceFile, program.getTypeChecker(), 1, "test", "", new package_extra_1.PackageExtras());
     visitor.traverse(sourceFile, 0, undefined);
     fs.unlinkSync(fileName);
     return visitor.getResult();

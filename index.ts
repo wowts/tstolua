@@ -1,8 +1,9 @@
 import * as ts from "typescript";
 import * as fs from "fs";
-import { LuaVisitor, getAppName } from "./luavisitor";
+import { LuaVisitor } from "./luavisitor";
 import * as path from "path";
 import { option } from "commander";
+import { PackageExtras, getAppName } from "./package-extra";
 
 function reportDiagnostics(diagnostics: ReadonlyArray<ts.Diagnostic>): void {
     diagnostics.forEach(diagnostic => {
@@ -82,13 +83,15 @@ else {
         return path.normalize(fullPath).replace(rootDir, "").replace(/^[\\/]/,"").replace(/\.ts$/, "");
     }
 
+    const packageExtras = new PackageExtras();
+
     for (const sourceFile of program.getSourceFiles()) {
         if (sourceFile.isDeclarationFile) continue;
         if (!parsedConfig.fileNames.some(x => x === sourceFile.fileName)) continue;
         const moduleName = getModuleName(sourceFile.fileName);
         sourceFile.moduleName = "./" + moduleName.replace("\\", "/");
 
-        const luaVisitor = new LuaVisitor(sourceFile, checker, appVersion, appName, rootDir);
+        const luaVisitor = new LuaVisitor(sourceFile, checker, appVersion, appName, rootDir, packageExtras);
         luaVisitor.traverse(sourceFile, 0, undefined);
         const relativePath = moduleName + ".lua";
         const outputPath = path.join(outDir, relativePath);

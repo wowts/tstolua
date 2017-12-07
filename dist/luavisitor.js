@@ -3,18 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const ts = require("typescript");
 const path = require("path");
 const typescript_1 = require("typescript");
-/** Remove the team's name, and transform to PascalCase if there is a _ in the name */
-function getAppName(input) {
-    let moduleName = input.replace(/^@\w+\//, "");
-    if (moduleName.indexOf("_") >= 0) {
-        moduleName = moduleName.replace(/_db/g, "DB");
-        moduleName = moduleName.replace(/_gui/g, "GUI");
-        moduleName = moduleName.replace(/_(\w)/g, (_, x) => x.toUpperCase());
-        moduleName = moduleName.replace(/^\w/, x => x.toUpperCase());
-    }
-    return moduleName;
-}
-exports.getAppName = getAppName;
 var ModuleType;
 (function (ModuleType) {
     ModuleType[ModuleType["WithoutObject"] = 0] = "WithoutObject";
@@ -30,12 +18,13 @@ const globalModules = {
     ["@wowts/lua"]: ModuleType.WithoutObject,
 };
 class LuaVisitor {
-    constructor(sourceFile, typeChecker, moduleVersion, appName, rootDir) {
+    constructor(sourceFile, typeChecker, moduleVersion, appName, rootDir, packageExtras) {
         this.sourceFile = sourceFile;
         this.typeChecker = typeChecker;
         this.moduleVersion = moduleVersion;
         this.appName = appName;
         this.rootDir = rootDir;
+        this.packageExtras = packageExtras;
         this.result = "";
         this.imports = [];
         // private importedVariables: {[name:string]: string} = {};
@@ -109,9 +98,13 @@ if not __exports then return end
                         prehambule += `local ${moduleVariableName} = LibStub:GetLibrary("${fullModuleName}")\n`;
                     }
                     else {
-                        let moduleName = getAppName(imp.module);
+                        const extras = this.packageExtras.getExtras(imp.module);
+                        let moduleName = extras.name;
                         fullModuleName = `"${moduleName}"`;
-                        if (globalModules[imp.module] === ModuleType.WithObject) {
+                        if (extras.isGlobal) {
+                            prehambule += `local ${moduleVariableName} = ${moduleName}\n`;
+                        }
+                        else if (globalModules[imp.module] === ModuleType.WithObject) {
                             prehambule += `local ${moduleVariableName} = LibStub:GetLibrary(${fullModuleName})\n`;
                         }
                         else {
