@@ -606,6 +606,15 @@ if not __exports then return end
                 else if (identifier.text === "__args") {
                     this.result += "...";
                 }
+                // else if (identifier.text === this.addonModule) {
+                //     this.result += "...";
+                // }
+                // else if (this.importedVariables[identifier.text]) {
+                //     this.result += this.importedVariables[identifier.text] + "." + identifier.text;
+                // }
+                // else if (this.exportedVariables[identifier.text]) {
+                //     this.result += "__exports." + identifier.text;
+                // }
                 else {
                     if (this.typeChecker) {
                         const symbol = this.typeChecker.getSymbolAtLocation(node);

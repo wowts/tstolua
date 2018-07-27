@@ -18,26 +18,13 @@ function reportDiagnostics(diagnostics: ReadonlyArray<ts.Diagnostic>): void {
 }
 
 const options = option("-j, --js", "Emit javascript")
-    .option("-p, --project [tsconfig.json", "tsproject.json path", "./tsconfig.json")
+    .option("-w, --watch", "Watch mode")    
+    .option("-p, --project [tsconfig.json]", "tsproject.json path", "./tsconfig.json")
     .parse(process.argv);
 
 const configFileName = path.resolve(options.project);
     
-const packageFileName = path.join(path.dirname(configFileName), "package.json");
-const packageFile = JSON.parse(fs.readFileSync(packageFileName).toString());
-const version: string = packageFile.version;
-const match = version.match(/(\d+)(?:\.(\d+))(?:\.(\d+))/);
-let major: string, minor:string, patch:string;
-let appVersion = 0;
-if (match) {
-    [,major, minor, patch] = match;
-    appVersion = (parseInt(major) * 100 + parseInt(minor)) * 100 + parseInt(patch);
-}
-else {
-    console.error(`Can't parse package.json version number ${version}`);
-    process.exit(1);
-}
-let appName: string = getAppName(packageFile.name);
+const { appName, appVersion } = parsePackage(configFileName);
 
 const configJson = fs.readFileSync(configFileName).toString();
 const config = ts.parseConfigFileTextToJson(configFileName, configJson);
@@ -52,22 +39,42 @@ if (parsedConfig.errors.length) {
     reportDiagnostics(parsedConfig.errors);
     process.exit(1);
 }
-
-const program = ts.createProgram(parsedConfig.fileNames, parsedConfig.options);
-// program.emit();
-reportDiagnostics(program.getSyntacticDiagnostics());
-reportDiagnostics(program.getSemanticDiagnostics());
-// reportDiagnostics(program.getDeclarationDiagnostics());
 const outDir = parsedConfig.options.outDir;
 if (!outDir) {
-    console.error("outDir option must be set");
-    process.exit(1);
+    throw "outDir option must be set";
 }
-else { 
+    
+if (options.watch) {
+    const createProgram = ts.createSemanticDiagnosticsBuilderProgram;
+    let error = false;
+    const host = ts.createWatchCompilerHost(configFileName, {}, ts.sys, undefined, undefined, undefined);
+    const originalCreateProgram = host.createProgram;
+    host.createProgram = (rootNames, options, host, oldProgram) => {
+        return originalCreateProgram(rootNames, options, host, oldProgram);
+    };
+    const origAfterProgramCreate = host.afterProgramCreate;
+    host.afterProgramCreate = program => {
+        origAfterProgramCreate && origAfterProgramCreate(program);
+        if (program.getSemanticDiagnostics().length === 0 && program.getSyntacticDiagnostics().length === 0) {
+            emitProgram(program.getSourceFiles(), outDir, program.getProgram().getTypeChecker());
+        }
+    }
+
+    ts.createWatchProgram(host);
+}
+else {
+    const program = ts.createProgram(parsedConfig.fileNames, parsedConfig.options);
+    // program.emit();
+    reportDiagnostics(program.getSyntacticDiagnostics());
+    reportDiagnostics(program.getSemanticDiagnostics());
+    // reportDiagnostics(program.getDeclarationDiagnostics());
     if (options.js) {
         program.emit();
     }
+    emitProgram(program.getSourceFiles(), outDir, program.getTypeChecker());
+}
 
+function emitProgram(sourceFiles: ReadonlyArray<ts.SourceFile>, outDir: string, typeChecker: ts.TypeChecker) {
     interface Source {
         name: string;
         references: Source[];
@@ -76,7 +83,6 @@ else {
     const sortedSources:Source[] = [];
     const sources: Source[] = [];
     const allSources = new Map<string, Source>();
-    const checker = program.getTypeChecker();
     const rootDir = path.normalize(parsedConfig.options.rootDir || rootPath);
 
     function getModuleName(fullPath: string) {
@@ -85,13 +91,13 @@ else {
 
     const packageExtras = new PackageExtras();
 
-    for (const sourceFile of program.getSourceFiles()) {
+    for (const sourceFile of sourceFiles) {
         if (sourceFile.isDeclarationFile) continue;
         if (!parsedConfig.fileNames.some(x => x === sourceFile.fileName)) continue;
         const moduleName = getModuleName(sourceFile.fileName);
         sourceFile.moduleName = "./" + moduleName.replace("\\", "/");
 
-        const luaVisitor = new LuaVisitor(sourceFile, checker, appVersion, appName, rootDir, packageExtras);
+        const luaVisitor = new LuaVisitor(sourceFile, typeChecker, appVersion, appName, rootDir, packageExtras);
         luaVisitor.traverse(sourceFile, 0, undefined);
         const relativePath = moduleName + ".lua";
         const outputPath = path.join(outDir, relativePath);
@@ -153,4 +159,24 @@ else {
     fileList += `</Ui>`;
 
     fs.writeFileSync(path.join(outDir, "files.xml"), fileList);
+}
+
+
+function parsePackage(configFileName: string) {
+    const packageFileName = path.join(path.dirname(configFileName), "package.json");
+    const packageFile = JSON.parse(fs.readFileSync(packageFileName).toString());
+    const version: string = packageFile.version;
+    const match = version.match(/(\d+)(?:\.(\d+))(?:\.(\d+))/);
+    let major: string, minor:string, patch:string;
+    let appVersion = 0;
+    if (match) {
+        [,major, minor, patch] = match;
+        appVersion = (parseInt(major) * 100 + parseInt(minor)) * 100 + parseInt(patch);
+    }
+    else {
+        console.error(`Can't parse package.json version number ${version}`);
+        process.exit(1);
+    }
+    const appName: string = getAppName(packageFile.name);
+    return { appName, appVersion }
 }

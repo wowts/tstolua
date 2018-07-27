@@ -17,6 +17,10 @@ function testTransform(t:TestContext, source: string) {
         return x.messageText + " at " + (x.file && x.start && x.file.getLineAndCharacterOfPosition(x.start).line)
     } ), []);
     let sourceFile = program.getSourceFile(fileName);
+    if (!sourceFile) {
+        t.fail("It isn't a source file")
+        return;
+    }
     sourceFile.moduleName = "./source";
     //const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, false);
     // TODO how to create the type checker without the program or how to create a program from a source file?

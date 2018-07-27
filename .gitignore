@@ -4,3 +4,4 @@ testfiles
 *.map
 dist/*.js.map
 yarn-error.log
+/.vscode
