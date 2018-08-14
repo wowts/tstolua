@@ -350,4 +350,28 @@ local Test = __class(nil, {
 })
 `);
 });
+ava_1.test("+=", t => {
+    t.is(testTransform(t, `let a = 3;
+a += 5;`), `local a = 3
+a = a + 5
+`);
+});
+ava_1.test("+= with strings", t => {
+    t.is(testTransform(t, `let a = "3";
+a += "5";`), `local a = "3"
+a = a .. "5"
+`);
+});
+ava_1.test("-=", t => {
+    t.is(testTransform(t, `let a = 3;
+a -= 5;`), `local a = 3
+a = a - 5
+`);
+});
+ava_1.test("-= with parenthesis", t => {
+    t.is(testTransform(t, `let a = 3;
+a -= 5 + 2;`), `local a = 3
+a = a - (5 + 2)
+`);
+});
 //# sourceMappingURL=luavisitor.spec.js.map

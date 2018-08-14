@@ -17,6 +17,7 @@ interface Import {
     variables?: ImportVariable[];
     hasCode?: boolean;
     isExternalLibraryImport?: boolean;
+    path?: string;
 }
 
 enum ModuleType {
@@ -33,6 +34,7 @@ const globalModules:{[key:string]: ModuleType} = {
     ["@wowts/wow-mock"]: ModuleType.WithoutObject,
     ["@wowts/lua"]: ModuleType.WithoutObject,
 };
+
 
 export class LuaVisitor {
     private result = "";
@@ -54,6 +56,12 @@ export class LuaVisitor {
                 this.exports = typeChecker.getExportsOfModule(currentModule);
             }
         }
+    }
+    
+    private isStringBinaryOperator(binary: ts.BinaryExpression) {
+        const leftType = this.typeChecker.getTypeAtLocation(binary.left);
+        const rightType = this.typeChecker.getTypeAtLocation(binary.right);
+        return ((leftType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) ||(rightType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)));
     }
 
     getResult() {
@@ -104,12 +112,12 @@ if not __exports then return end
                     moduleVariableName = imp.variable || "__" + imp.module.replace(/^@\w+\//,"").replace(/[^\w]/g, "")
                     let fullModuleName;
                     if (imp.module.indexOf(".") == 0) {
-                        fullModuleName = path.join(path.dirname(this.sourceFile.fileName), imp.module).replace(this.rootDir, "").replace(/\\/g, "/").replace(/^\//, "");
-                        if (fullModuleName === "index") {
+                        imp.path = path.join(path.dirname(this.sourceFile.fileName), imp.module).replace(this.rootDir, "").replace(/\\/g, "/").replace(/^\//, "");
+                        if (imp.path === "index") {
                             fullModuleName = this.appName;
                         }
                         else {
-                            fullModuleName = `${this.appName}/${fullModuleName}`;
+                            fullModuleName = `${this.appName}/${imp.path}`;
                         }
                         prehambule += `local ${moduleVariableName} = LibStub:GetLibrary("${fullModuleName}")\n`;
                     } 
@@ -129,6 +137,7 @@ if not __exports then return end
                 }
                 else {
                     moduleVariableName = imp.module.replace(/^@\w+\//, "");
+                    imp.isExternalLibraryImport = true;
                 }
                 if (imp.variables) {
                     // Count usages because couldn't find how to filter out Interfaces or this kind of symbols
@@ -308,16 +317,16 @@ if not __exports then return end
                     case ts.SyntaxKind.PlusEqualsToken:
                         this.result += " = ";
                         this.traverse(binary.left, 0, node);
-                        const symbol = this.typeChecker.getSymbolAtLocation(binary.left);
-                        if (symbol && symbol.)
-                        this.result += " + ";
+                        if (this.isStringBinaryOperator(binary)) {
+                            this.result += " .. ";
+                        } else {
+                            this.result += " + ";
+                        }
                         parenthesis = true;
                         break;
                     case ts.SyntaxKind.PlusToken:
                         {
-                            const leftType = this.typeChecker.getTypeAtLocation(binary.left);
-                            const rightType = this.typeChecker.getTypeAtLocation(binary.right);
-                            if ((leftType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) ||(rightType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral))) {
+                            if (this.isStringBinaryOperator(binary)) {
                                 this.result += " .. ";
                             } else {
                                 this.result += " + ";

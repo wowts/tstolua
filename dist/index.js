@@ -103,8 +103,8 @@ function emitProgram(sourceFiles, outDir, typeChecker) {
         let hasDependencies = false;
         if (modules) {
             for (const value of modules) {
-                if (value && !value.isExternalLibraryImport) {
-                    const fileName = getModuleName(value.module); //.resolvedFileName);
+                if (value && value.hasCode && !value.isExternalLibraryImport && value.path) {
+                    const fileName = getModuleName(value.path); //.resolvedFileName);
                     let otherSource = allSources.get(fileName);
                     if (otherSource == undefined) {
                         otherSource = { referencedBy: [], references: [], name: fileName };
