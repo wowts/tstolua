@@ -379,3 +379,37 @@ local Test = __class(nil, {
 })
 `);
 });
+
+test("+=", t => {
+    t.is(testTransform(t, `let a = 3;
+a += 5;`),
+    `local a = 3
+a = a + 5
+`);
+})
+
+
+test("+= with strings", t => {
+    t.is(testTransform(t, `let a = "3";
+a += "5";`),
+    `local a = "3"
+a = a .. "5"
+`);
+})
+
+test("-=", t => {
+    t.is(testTransform(t, `let a = 3;
+a -= 5;`),
+    `local a = 3
+a = a - 5
+`);
+})
+
+
+test("-= with parenthesis", t => {
+    t.is(testTransform(t, `let a = 3;
+a -= 5 + 2;`),
+    `local a = 3
+a = a - (5 + 2)
+`);
+})

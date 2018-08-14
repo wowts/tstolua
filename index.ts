@@ -112,12 +112,13 @@ function emitProgram(sourceFiles: ReadonlyArray<ts.SourceFile>, outDir: string, 
             allSources.set(moduleName, source);
         }
         
-        const modules:Map<string, any> = (<any>sourceFile).resolvedModules;
+        const modules = luaVisitor.imports;
+        //const modules:Map<string, any> = (<any>sourceFile).resolvedModules;
         let hasDependencies = false;
         if (modules) {
-            for (const [key, value] of modules.entries()) {
+           for (const value of modules) {
                 if (value && !value.isExternalLibraryImport) {
-                    const fileName = getModuleName(value.resolvedFileName);
+                    const fileName = getModuleName(value.module); //.resolvedFileName);
                     let otherSource = allSources.get(fileName);
                     if (otherSource == undefined) {
                         otherSource = <Source>{ referencedBy:[], references:[], name: fileName};

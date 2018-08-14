@@ -84,6 +84,7 @@ if not __exports then return end
                 let moduleVariableName;
                 if (imp.variables && imp.variables.every(x => x.usages == 0))
                     continue;
+                imp.hasCode = true;
                 if (globalModules[imp.module] === undefined) {
                     moduleVariableName = imp.variable || "__" + imp.module.replace(/^@\w+\//, "").replace(/[^\w]/g, "");
                     let fullModuleName;
@@ -110,6 +111,7 @@ if not __exports then return end
                         else {
                             prehambule += `local ${moduleVariableName} = LibStub:GetLibrary(${fullModuleName}, true)\n`;
                         }
+                        imp.isExternalLibraryImport = true;
                     }
                 }
                 else {
@@ -227,12 +229,19 @@ if not __exports then return end
             case ts.SyntaxKind.BinaryExpression:
                 const binary = node;
                 this.traverse(binary.left, tabs, node);
+                let parenthesis = false;
                 switch (binary.operatorToken.kind) {
                     case ts.SyntaxKind.AmpersandAmpersandToken:
                         this.result += " and ";
                         break;
                     case ts.SyntaxKind.AsteriskToken:
                         this.result += " * ";
+                        break;
+                    case ts.SyntaxKind.AsteriskEqualsToken:
+                        this.result += " = ";
+                        this.traverse(binary.left, 0, node);
+                        this.result += " * ";
+                        parenthesis = true;
                         break;
                     case ts.SyntaxKind.BarBarToken:
                         this.result += " or ";
@@ -263,11 +272,31 @@ if not __exports then return end
                     case ts.SyntaxKind.LessThanEqualsToken:
                         this.result += " <= ";
                         break;
+                    case ts.SyntaxKind.MinusEqualsToken:
+                        this.result += " = ";
+                        this.traverse(binary.left, 0, node);
+                        this.result += " - ";
+                        parenthesis = true;
+                        break;
                     case ts.SyntaxKind.MinusToken:
                         this.result += " - ";
                         break;
                     case ts.SyntaxKind.PercentToken:
                         this.result += " % ";
+                        break;
+                    case ts.SyntaxKind.PercentEqualsToken:
+                        this.result += " = ";
+                        this.traverse(binary.left, 0, node);
+                        this.result += " % ";
+                        parenthesis = true;
+                        break;
+                    case ts.SyntaxKind.PlusEqualsToken:
+                        this.result += " = ";
+                        this.traverse(binary.left, 0, node);
+                        const symbol = this.typeChecker.getSymbolAtLocation(binary.left);
+                        if (symbol && symbol.)
+                            this.result += " + ";
+                        parenthesis = true;
                         break;
                     case ts.SyntaxKind.PlusToken:
                         {
@@ -284,19 +313,29 @@ if not __exports then return end
                     case ts.SyntaxKind.SlashToken:
                         this.result += " / ";
                         break;
+                    case ts.SyntaxKind.SlashEqualsToken:
+                        this.result += " = ";
+                        this.traverse(binary.left, 0, node);
+                        this.result += " / ";
+                        parenthesis = true;
+                        break;
                     default:
                         this.addError(binary.operatorToken);
                         this.result += `{Binary ${ts.SyntaxKind[binary.operatorToken.kind]}}`;
                         break;
                 }
+                parenthesis = parenthesis && binary.right.kind === ts.SyntaxKind.BinaryExpression;
+                if (parenthesis)
+                    this.result += "(";
                 this.traverse(binary.right, tabs, node);
+                if (parenthesis)
+                    this.result += ")";
                 break;
             case ts.SyntaxKind.BindingElement:
                 const bindingElement = node;
                 this.traverse(bindingElement.name, tabs, node);
                 break;
             case ts.SyntaxKind.Block:
-                const block = node;
                 if (parent && (parent.kind == ts.SyntaxKind.Block || parent.kind == ts.SyntaxKind.SourceFile)) {
                     this.writeTabs(tabs);
                     this.result += "do\n";
