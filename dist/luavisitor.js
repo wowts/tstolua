@@ -126,7 +126,10 @@ if not __exports then return end
                 if (imp.variables) {
                     // Count usages because couldn't find how to filter out Interfaces or this kind of symbols
                     for (const variable of imp.variables.filter(x => x.usages > 0)) {
-                        if (globalModules[imp.module] === ModuleType.WithoutObject) {
+                        if (imp.module === "@wowts/lua" && variable.name === "kpairs") {
+                            prehambule += `local ${variable.alias} = pairs\n`;
+                        }
+                        else if (globalModules[imp.module] === ModuleType.WithoutObject) {
                             prehambule += `local ${variable.alias} = ${variable.name}\n`;
                         }
                         else {
@@ -232,6 +235,12 @@ if not __exports then return end
                 this.writeTabs(tabs);
                 this.result += "end";
                 break;
+            case ts.SyntaxKind.AsExpression:
+                {
+                    const asExpression = node;
+                    this.traverse(asExpression.expression, tabs, node);
+                    break;
+                }
             case ts.SyntaxKind.BinaryExpression:
                 const binary = node;
                 this.traverse(binary.left, tabs, node);
@@ -786,6 +795,12 @@ if not __exports then return end
                     this.writeArray(newExpression.arguments, tabs, node);
                 this.result += ")";
                 break;
+            case ts.SyntaxKind.NonNullExpression:
+                {
+                    const nonNullExpression = node;
+                    this.traverse(nonNullExpression.expression, tabs, node);
+                    break;
+                }
             case ts.SyntaxKind.Parameter:
                 const parameter = node;
                 this.traverse(parameter.name, tabs, node);

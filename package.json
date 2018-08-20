@@ -17,7 +17,6 @@
     "test:debug": "node node_modules/ava/profile.js dist/tests"
   },
   "devDependencies": {
-    "@types/commander": "^2.11.0",
     "@types/node": "^8.0.28",
     "ava": "^0.22.0"
   },
