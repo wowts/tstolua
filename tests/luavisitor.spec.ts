@@ -80,7 +80,7 @@ local Test = __class(Base, {
 `); 
 });
 
-test(t => {
+test.skip(t => {
     t.is(testTransform(t, `import { OvaleScripts } from "./OvaleScripts";
 let a = OvaleScripts;
 import Test from 'Test';
@@ -98,7 +98,7 @@ __exports.bla = 3
 });
 
 
-test(t => {
+test("litteral object", t => {
     t.is(testTransform(t, `let a = {
         TEST: 'a',
         ["a"]: 'b',
@@ -206,6 +206,11 @@ test(t => {
 
 test(t => {
     t.is(testTransform(t, "`z${'3'}${3}z`"), "\"z\" .. \"3\" .. 3 .. \"z\"\n");
+});
+
+
+test("string template with parenthesis", t => {
+    t.is(testTransform(t, "`z${2 + 3}`"), "\"z\" .. (2 + 3)\n");
 });
 
 test(t => {
@@ -405,11 +410,25 @@ a = a - 5
 `);
 })
 
-
 test("-= with parenthesis", t => {
     t.is(testTransform(t, `let a = 3;
 a -= 5 + 2;`),
     `local a = 3
 a = a - (5 + 2)
 `);
+})
+
+test("object literal with string keys", t => {
+    t.is(testTransform(t, `const a = { "foo": "bar", bar: "foo" }`), `local a = {
+    ["foo"] = "bar",
+    bar = "foo"
+}
+`)
+})
+
+test("object literal with number keys", t => {
+    t.is(testTransform(t, `const a = { 2: "bar" }`), `local a = {
+    [2] = "bar"
+}
+`)
 })

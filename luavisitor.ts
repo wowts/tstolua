@@ -870,7 +870,8 @@ if not __exports then return end
             case ts.SyntaxKind.PropertyAssignment:
                 const propertyAssignment = <ts.PropertyAssignment>node;
                 this.writeTabs(tabs);
-                if (propertyAssignment.name.getText().match(/^\d/)) {
+                if (propertyAssignment.name.kind !== ts.SyntaxKind.Identifier &&
+                    propertyAssignment.name.kind !== ts.SyntaxKind.ComputedPropertyName) {
                     this.result += "[";
                     this.traverse(propertyAssignment.name, tabs, node);
                     this.result += "]";
@@ -955,7 +956,9 @@ if not __exports then return end
             case ts.SyntaxKind.TemplateSpan:
                 {
                     const templateSpan = <ts.TemplateSpan>node;
+                    if (templateSpan.expression.kind === ts.SyntaxKind.BinaryExpression) this.result += '(';
                     this.traverse(templateSpan.expression, tabs, node);
+                    if (templateSpan.expression.kind === ts.SyntaxKind.BinaryExpression) this.result += ')';
                     if (templateSpan.literal && templateSpan.literal.text.length > 0) {
                         this.result += " .. ";
                         this.writeQuotedString(templateSpan.literal.text);
