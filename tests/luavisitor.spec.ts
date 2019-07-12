@@ -1,46 +1,17 @@
-import { test, TestContext } from "ava";
-import * as ts from "typescript";
-import { LuaVisitor } from "../luavisitor";
-import * as fs from "fs";
-import { PackageExtras } from "../package-extra";
+import { test } from "ava";
+import { testTransform } from "./helpers/compiler";
 
-let i = 0;
-if (!fs.existsSync("testfiles")) fs.mkdirSync("testfiles");
-
-function testTransform(t:TestContext, source: string) {
-    const dir = "testfiles/test" + (i++);
-    const fileName = dir + "/source.ts";
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-    fs.writeFileSync(fileName, source);
-    const program = ts.createProgram([fileName], { module: ts.ModuleKind.CommonJS, emitDecoratorMetadata: false, rootDir: dir });
-    t.deepEqual(program.getSyntacticDiagnostics().map(x => {
-        return x.messageText + " at " + (x.file && x.start && x.file.getLineAndCharacterOfPosition(x.start).line)
-    } ), []);
-    let sourceFile = program.getSourceFile(fileName);
-    if (!sourceFile) {
-        t.fail("It isn't a source file")
-        return;
-    }
-    sourceFile.moduleName = "./source";
-    //const sourceFile = ts.createSourceFile("source.ts", source, ts.ScriptTarget.ES2015, false);
-    // TODO how to create the type checker without the program or how to create a program from a source file?
-    const visitor = new LuaVisitor(sourceFile, program.getTypeChecker(), 1, "test", "", new PackageExtras());
-    visitor.traverse(sourceFile, 0, undefined);
-    fs.unlinkSync(fileName);
-    return visitor.getResult();
-}
-
-test(t => {
+test("simple assignation", t => {
     t.is(testTransform(t, "let a = 2 + 3;"), `local a = 2 + 3
 `);
 });
 
-test(t =>  {
+test("function call", t =>  {
     t.is(testTransform(t, "a.b = a.c(a.d)"), `a.b = a.c(a.d)
 `);
 });
 
-test(t => {
+test("if else", t => {
     t.is(testTransform(t, `if (!a != 4) {
     b = 3.5;
 } else if (a == 4) {
@@ -59,14 +30,14 @@ end
 });
 
 
-test(t => {
+test("table iteration", t => {
     t.is(testTransform(t, `for (let k = lualength(test); k >= 1; k += -1) {
 }`), `for k = #test, 1, -1 do
 end
 `);
 });
 
-test(t => {
+test("class inheritance", t => {
     t.is(testTransform(t, `class Test extends Base {
         constructor() {
             super(16);
@@ -80,7 +51,7 @@ local Test = __class(Base, {
 `); 
 });
 
-test.skip(t => {
+test.skip("module import", t => {
     t.is(testTransform(t, `import { OvaleScripts } from "./OvaleScripts";
 let a = OvaleScripts;
 import Test from 'Test';
@@ -116,7 +87,7 @@ test("litteral object", t => {
 `)
 });
 
-test(t => {
+test("class inheritance with property access", t => {
     t.is(testTransform(t, `class Test extends Base {
     a = 3;
     constructor(a) {
@@ -140,14 +111,14 @@ local Test = __class(Base, {
 `)
 });
 
-test(t => {
+test("simple lambda function", t => {
     t.is(testTransform(t, `(a,b) => 18`), `function(a, b)
     return 18
 end
 `);
 });
 
-test(t => {
+test("do while", t => {
     t.is(testTransform(t, `do {
         a = a + 1;
     }
@@ -159,7 +130,7 @@ until not ( not (a > 5))
 });
 
 
-test(t => {
+test("dynamic class", t => {
     t.is(testTransform(t, `return class extends Base {
     value = 3;
     constructor(...rest:any[]) {
@@ -183,28 +154,28 @@ return __class(Base, {
 `);
 });
 
-test(t => {
+test("+ opereator", t => {
     t.is(testTransform(t, "3 + 3"), "3 + 3\n");
 });
 
-test(t => {
+test("for of with unused keys", t => {
     t.is(testTransform(t, "for (const [] of toto) {}"), "for _ in toto do\nend\n");
 });
 
 
-test(t => {
+test("initialize an array with a number as key", t => {
     t.is(testTransform(t, "a = { 1: 'a' }"), `a = {
     [1] = "a"
 }
 `);
 });
 
-test(t => {
+test("simple string template", t => {
     t.is(testTransform(t, "`${'3'}${3}`"), "\"3\" .. 3\n");
 });
 
 
-test(t => {
+test("more complex template string", t => {
     t.is(testTransform(t, "`z${'3'}${3}z`"), "\"z\" .. \"3\" .. 3 .. \"z\"\n");
 });
 
@@ -213,7 +184,7 @@ test("string template with parenthesis", t => {
     t.is(testTransform(t, "`z${2 + 3}`"), "\"z\" .. (2 + 3)\n");
 });
 
-test(t => {
+test("function that returns a new object that is declared after the call", t => {
     t.is(testTransform(t, `function a(){
     return new Test();
 }
@@ -229,7 +200,7 @@ __exports.Test = __class(nil, {
 `);
 });
 
-test(t => {
+test("class with methods", t => {
     t.is(testTransform(t, `class Test {
     a: (a) => number;
     b(c):number {}
@@ -267,7 +238,7 @@ a:b(23)
 })
 
 
-test(t => {
+test("class declaration with class extension", t => {
     t.is(testTransform(t, `
 type Constructor<T> = new(...args: any[]) => T;    
 class Test {
@@ -430,5 +401,28 @@ test("object literal with number keys", t => {
     t.is(testTransform(t, `const a = { 2: "bar" }`), `local a = {
     [2] = "bar"
 }
+`)
+})
+
+test("forward reference to local function", t => {
+    t.is(testTransform(t, `function a() {
+    f(2);
+}
+function f(i: number) {
+    return i * i;
+}`), `local f
+local function a()
+    f(2)
+end
+f = function(i)
+    return i * i
+end
+`)
+});
+
+test("cast on left side of an assignement", t => {
+    t.is(testTransform(t, `let a: string;
+(<any>a) = "toto";`), `local a
+a = "toto"
 `)
 })

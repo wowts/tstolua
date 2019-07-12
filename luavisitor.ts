@@ -48,6 +48,7 @@ export class LuaVisitor {
     public errors:string[] = [];
     private needClass = false;
     private importedVariables: {[name: string]: ImportVariable} = {};
+    private forwardUsedLocalSymbols = new Map<ts.Symbol, boolean>();
     
     constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker, private moduleVersion: number, private appName: string, private rootDir: string, private packageExtras: PackageExtras)  {
         if (typeChecker) {
@@ -66,11 +67,12 @@ export class LuaVisitor {
 
     getResult() {
         let hasExportedVariables = this.hasExportDefault;
+        const hasForwardDeclaredFunctions = Array.from(this.forwardUsedLocalSymbols).some(x => x[1]);
         for (const key in this.exportedVariables) {
             hasExportedVariables = true;
             break;
         }
-        if (this.imports.length > 0 ||hasExportedVariables || this.needClass) {
+        if (this.imports.length > 0 ||hasExportedVariables || this.needClass || hasForwardDeclaredFunctions) {
 //             const moduleName = this.sourceFile.moduleName;
 //             const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
 //             if (this.imports.length > 0) {
@@ -91,8 +93,10 @@ export class LuaVisitor {
                 if (this.sourceFile.moduleName === "./index") {
                     fullModuleName = this.appName;
                 }
-                else {
+                else if (this.sourceFile.moduleName) {
                     fullModuleName = `${this.appName}/${this.sourceFile.moduleName.replace(/^\.\//, "")}`;
+                } else {
+                    throw Error(`Source ${this.sourceFile.fileName} has no module name`);
                 }
                 prehambule += `local __exports = LibStub:NewLibrary("${fullModuleName}", ${this.moduleVersion})
 if not __exports then return end
@@ -154,9 +158,15 @@ if not __exports then return end
                     }
                 }
             }
+
+            if (hasForwardDeclaredFunctions) {
+                prehambule += Array.from(this.forwardUsedLocalSymbols).filter(x => x[1]).map(([s]) => `local ${s.name}`).join("\n") + "\n";
+            }
+         
             this.result = prehambule + this.result;
         }
-        return this.result;
+
+          return this.result;
     }
 
     writeTabs(tabs: number) {
@@ -225,7 +235,7 @@ if not __exports then return end
     }
 
     public traverse(node: ts.Node, tabs: number, parent: ts.Node | undefined, options?: Options) {
-        node.parent = parent;
+        if (parent) node.parent = parent;
         switch (node.kind) {
             case ts.SyntaxKind.ArrayBindingPattern:
                 const arrayBindingPattern = <ts.ArrayBindingPattern>node;
@@ -261,8 +271,16 @@ if not __exports then return end
                 }
             case ts.SyntaxKind.BinaryExpression:
                 const binary = <ts.BinaryExpression>node;
-                this.traverse(binary.left, tabs, node);
+                if (binary.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                        ts.isParenthesizedExpression(binary.left)) {
+                    this.traverse((binary.left.expression), tabs, node);
+                }
+                else {
+                    this.traverse(binary.left, tabs, node);
+                }
+
                 let parenthesis = false;
+                
                 switch (binary.operatorToken.kind) {
                     case ts.SyntaxKind.AmpersandAmpersandToken:
                         this.result += " and ";
@@ -637,12 +655,21 @@ if not __exports then return end
                 {
                     const functionDeclaration = <ts.FunctionDeclaration>node;
                     if (!functionDeclaration.body) break;
-                    const isExport = this.writeLocalOrExport(functionDeclaration);
+                    const symbol = functionDeclaration.name && this.typeChecker.getSymbolAtLocation(functionDeclaration.name);
+                    const isExport = this.hasExportModifier(functionDeclaration);
+                    const isForwardDeclared = !isExport && symbol && this.forwardUsedLocalSymbols.get(symbol);
+                    if (!isForwardDeclared) this.writeLocalOrExport(functionDeclaration);
+
                     if (functionDeclaration.name) {
-                        if (!isExport) this.result += "function "
+                        if (!isExport) {
+                            if (!isForwardDeclared && symbol) {
+                                this.result += "function ";
+                                this.forwardUsedLocalSymbols.set(symbol, false);
+                            }
+                        }
                         this.traverse(functionDeclaration.name, tabs, node, { export: isExport });
                     }
-                    if (isExport) {
+                    if (isExport || isForwardDeclared) {
                         this.result += " = function(";
                     }
                     else {
@@ -690,11 +717,14 @@ if not __exports then return end
                     if (this.typeChecker) {
                         const symbol = this.typeChecker.getSymbolAtLocation(node);
                         if (symbol) {
+                            const isImported = (symbol.flags & ts.SymbolFlags.AliasExcludes) && this.importedVariables[identifier.text];
                             if (this.exports.indexOf(symbol) >= 0) {
                                 this.result += "__exports.";
+                            } else if (!isImported && (symbol.flags &  ts.SymbolFlags.Function) && !this.forwardUsedLocalSymbols.has(symbol)) {
+                                this.forwardUsedLocalSymbols.set(symbol, true);
                             }
-                            this.typeChecker.getRootSymbols(symbol)
-                            if ((symbol.flags & ts.SymbolFlags.AliasExcludes) && this.importedVariables[identifier.text]) {
+                            // this.typeChecker.getRootSymbols(symbol)
+                            if (isImported) {
                                 this.importedVariables[identifier.text].usages++;
                             }
                         }
@@ -742,13 +772,12 @@ if not __exports then return end
                 // else 
                 {
                     if (importDeclaration.importClause.name) {
-                        this.imports.push({ module: module.text, variable: importDeclaration.importClause.name.text, hasCode: true });
+                        this.imports.push({ module: module.text, variable: importDeclaration.importClause.name.text });
                     }
                     else if (importDeclaration.importClause.namedBindings) {
                         // const moduleName =  "__" + module.text.replace(/[^\w]/g, "");
-                        const variables: ImportVariable[] = [];
-                        const imp: Import = { module: module.text, variables: variables };
-                        this.imports.push(imp);
+                        const variables:ImportVariable[] = [];
+                        this.imports.push({ module: module.text, variables: variables});
                         const importClauseNamedBindings = importDeclaration.importClause.namedBindings;
                         if (isNamedImports(importClauseNamedBindings)) {
                             const namedImports = importClauseNamedBindings;

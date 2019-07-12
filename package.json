@@ -1,6 +1,6 @@
 {
   "name": "@wowts/tstolua",
-  "version": "1.4.3",
+  "version": "1.6.1",
   "main": "./dist/index.js",
   "bin": {
     "tstolua": "./bin/tstolua"
@@ -17,12 +17,12 @@
     "test:debug": "node node_modules/ava/profile.js dist/tests"
   },
   "devDependencies": {
-    "@types/node": "^8.0.28",
-    "ava": "^0.22.0"
+    "@types/node": "^10.11.3",
+    "ava": "^0.25.0"
   },
   "dependencies": {
-    "commander": "^2.11.0",
-    "typescript": "^2.9.1"
+    "commander": "^2.18.0",
+    "typescript": "^3.5.3"
   },
   "repository": {
     "url": "https://github.com/Sidoine/tstolua"
