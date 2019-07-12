@@ -742,12 +742,13 @@ if not __exports then return end
                 // else 
                 {
                     if (importDeclaration.importClause.name) {
-                        this.imports.push({ module: module.text, variable: importDeclaration.importClause.name.text });
+                        this.imports.push({ module: module.text, variable: importDeclaration.importClause.name.text, hasCode: true });
                     }
                     else if (importDeclaration.importClause.namedBindings) {
                         // const moduleName =  "__" + module.text.replace(/[^\w]/g, "");
-                        const variables:ImportVariable[] = [];
-                        this.imports.push({ module: module.text, variables: variables});
+                        const variables: ImportVariable[] = [];
+                        const imp: Import = { module: module.text, variables: variables };
+                        this.imports.push(imp);
                         const importClauseNamedBindings = importDeclaration.importClause.namedBindings;
                         if (isNamedImports(importClauseNamedBindings)) {
                             const namedImports = importClauseNamedBindings;
