@@ -1,7 +1,7 @@
 import * as ts from "typescript";
-import { LuaVisitor } from "../../luavisitor";
-import { PackageExtras } from "../../package-extra";
-import { TestContext } from "ava";
+import { LuaVisitor } from "../luavisitor";
+import { PackageExtras } from "../package-extra";
+import { ExecutionContext } from "ava";
 
 export class TestCompilerHost implements ts.CompilerHost {
     files = new Map<string, ts.SourceFile>();
@@ -40,17 +40,18 @@ export class TestCompilerHost implements ts.CompilerHost {
     }
 }
 
-export function testTransform(t:TestContext, source: string) {
+export function testTransform(t:ExecutionContext, source: string, ignoreError: boolean = false) {
     const fileName = "source.ts";
 
     const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2015, true);
     sourceFile.moduleName = "./source";
     const host = new TestCompilerHost(fileName, sourceFile);
-    const program = ts.createProgram([fileName], { module: ts.ModuleKind.CommonJS, emitDecoratorMetadata: false }, host);
+    const program = ts.createProgram([fileName], { module: ts.ModuleKind.CommonJS, emitDecoratorMetadata: false, strict: true, lib: ["ES2015"] }, host);
     t.deepEqual(program.getSyntacticDiagnostics(sourceFile).map(x => {
         return x.messageText + " at " + (x.file && x.start && x.file.getLineAndCharacterOfPosition(x.start).line)
     } ), []);
     const visitor = new LuaVisitor(sourceFile, program.getTypeChecker(), 1, "test", "", new PackageExtras());
     visitor.traverse(sourceFile, 0, undefined);
+    if (!ignoreError) t.deepEqual(visitor.errors, []);
     return visitor.getResult();
 }

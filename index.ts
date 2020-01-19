@@ -16,7 +16,6 @@ function reportDiagnostics(diagnostics: ReadonlyArray<ts.Diagnostic>): void {
         console.error(message);
     });
 }
-
 const options = option("-j, --js", "Emit javascript")
     .option("-w, --watch", "Watch mode")    
     .option("-p, --project [tsconfig.json]", "tsproject.json path", "./tsconfig.json")

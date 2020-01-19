@@ -1,6 +1,6 @@
 {
   "name": "@wowts/tstolua",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "main": "./dist/index.js",
   "bin": {
     "tstolua": "./bin/tstolua"
@@ -12,19 +12,25 @@
   "scripts": {
     "prepare": "tsc -p .",
     "watch": "tsc -w -p .",
-    "test": "ava dist/tests",
-    "test:watch": "ava --watch dist/tests",
-    "test:debug": "node node_modules/ava/profile.js dist/tests"
+    "test": "ava",
+    "test:watch": "ava --watch",
+    "test:debug": "node node_modules/ava/profile.js"
   },
   "devDependencies": {
-    "@types/node": "^10.11.3",
-    "ava": "^0.25.0"
+    "@types/node": "^10",
+    "ava": "^2.4.0"
   },
   "dependencies": {
-    "commander": "^2.18.0",
-    "typescript": "^3.5.3"
+    "commander": "^4.0.0",
+    "typescript": "^3.7.2"
   },
   "repository": {
     "url": "https://github.com/Sidoine/tstolua"
+  },
+  "ava": {
+    "files": [
+      "dist/**/*.spec.js",
+      "!dist/index.js"
+    ]
   }
 }

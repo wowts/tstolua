@@ -34,7 +34,7 @@ class LuaVisitor {
         this.currentClassDeclaration = undefined;
         this.exports = [];
         this.errors = [];
-        this.needClass = false;
+        this.luaLib = 0 /* Nothing */;
         this.importedVariables = {};
         this.forwardUsedLocalSymbols = new Map();
         if (typeChecker) {
@@ -56,7 +56,7 @@ class LuaVisitor {
             hasExportedVariables = true;
             break;
         }
-        if (this.imports.length > 0 || hasExportedVariables || this.needClass || hasForwardDeclaredFunctions) {
+        if (this.imports.length > 0 || hasExportedVariables || this.luaLib || hasForwardDeclaredFunctions) {
             //             const moduleName = this.sourceFile.moduleName;
             //             const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
             //             if (this.imports.length > 0) {
@@ -87,8 +87,17 @@ class LuaVisitor {
 if not __exports then return end
 `;
             }
-            if (this.needClass) {
-                prehambule += "local __class = LibStub:GetLibrary(\"tslib\").newClass\n";
+            if (this.luaLib) {
+                if (this.luaLib === 1 /* Class */) {
+                    prehambule += "local __class = LibStub:GetLibrary(\"tslib\").newClass\n";
+                }
+                else {
+                    prehambule += "local __tslib = LibStub:GetLibrary(\"tslib\")\n";
+                    if (this.luaLib & 1 /* Class */)
+                        prehambule += "local __class = __tslib.newClass\n";
+                    if (this.luaLib & 2 /* Ternary */)
+                        prehambule += "local __ternaryWrap = __tslib.ternaryWrap\nlocal __ternaryUnwrap = __tslib.ternaryUwrap\n";
+                }
             }
             for (const imp of this.imports) {
                 let moduleVariableName;
@@ -244,12 +253,11 @@ if not __exports then return end
                 this.writeTabs(tabs);
                 this.result += "end";
                 break;
-            case ts.SyntaxKind.AsExpression:
-                {
-                    const asExpression = node;
-                    this.traverse(asExpression.expression, tabs, node);
-                    break;
-                }
+            case ts.SyntaxKind.AsExpression: {
+                const asExpression = node;
+                this.traverse(asExpression.expression, tabs, node);
+                break;
+            }
             case ts.SyntaxKind.BinaryExpression:
                 const binary = node;
                 if (binary.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
@@ -331,16 +339,15 @@ if not __exports then return end
                         }
                         parenthesis = true;
                         break;
-                    case ts.SyntaxKind.PlusToken:
-                        {
-                            if (this.isStringBinaryOperator(binary)) {
-                                this.result += " .. ";
-                            }
-                            else {
-                                this.result += " + ";
-                            }
-                            break;
+                    case ts.SyntaxKind.PlusToken: {
+                        if (this.isStringBinaryOperator(binary)) {
+                            this.result += " .. ";
                         }
+                        else {
+                            this.result += " + ";
+                        }
+                        break;
+                    }
                     case ts.SyntaxKind.SlashToken:
                         this.result += " / ";
                         break;
@@ -382,151 +389,170 @@ if not __exports then return end
                 this.writeTabs(tabs);
                 this.result += "break\n";
                 break;
-            case ts.SyntaxKind.CallExpression:
-                {
-                    const callExpression = node;
-                    const text = callExpression.expression.getText();
-                    if (text === "lualength") {
-                        this.result += "#";
-                        this.writeArray(callExpression.arguments, tabs, node);
-                    }
-                    else if (text === "truthy") {
-                        this.writeArray(callExpression.arguments, tabs, node);
-                    }
-                    else {
-                        this.traverse(callExpression.expression, tabs, node, { callee: true });
-                        this.result += "(";
-                        if (callExpression.expression.kind === ts.SyntaxKind.SuperKeyword) {
-                            this.result += "self";
-                            if (callExpression.arguments.length)
-                                this.result += ", ";
-                        }
-                        this.writeArray(callExpression.arguments, tabs, node);
-                        this.result += ")";
-                    }
-                    break;
+            case ts.SyntaxKind.CallExpression: {
+                const callExpression = node;
+                const text = callExpression.expression.getText();
+                if (text === "lualength") {
+                    this.result += "#";
+                    this.writeArray(callExpression.arguments, tabs, node);
                 }
-            case ts.SyntaxKind.ClassDeclaration:
-                {
-                    const classExpression = node;
-                    if (this.currentClassDeclaration) {
-                        this.classDeclarations.push(this.currentClassDeclaration);
-                    }
-                    this.currentClassDeclaration = classExpression;
-                    let className = undefined;
-                    let isExport = false;
-                    if (classExpression.name) {
-                        isExport = this.writeLocalOrExport(classExpression);
-                        this.traverse(classExpression.name, tabs, node);
-                        className = classExpression.name.text;
-                        if (isExport) {
-                            this.exportedVariables[className] = true;
-                        }
-                        this.result += " = ";
-                    }
-                    this.needClass = true;
-                    this.result += "__class(";
-                    if (!this.writeHeritage(classExpression, tabs, node)) {
-                        this.result += "nil";
-                    }
-                    this.result += ", {\n";
-                    this.writeClassMembers(classExpression.members, tabs + 1, node);
-                    if (this.classDeclarations.length > 0) {
-                        this.currentClassDeclaration = this.classDeclarations.pop();
-                    }
-                    else {
-                        this.currentClassDeclaration = undefined;
-                    }
-                    this.writeTabs(tabs);
-                    this.result += "})\n";
-                    break;
+                else if (text === "truthy") {
+                    this.writeArray(callExpression.arguments, tabs, node);
                 }
-            case ts.SyntaxKind.ClassExpression:
-                {
-                    const classExpression = node;
-                    if (this.currentClassDeclaration) {
-                        this.classDeclarations.push(this.currentClassDeclaration);
+                else {
+                    this.traverse(callExpression.expression, tabs, node, { callee: true });
+                    this.result += "(";
+                    if (callExpression.expression.kind === ts.SyntaxKind.SuperKeyword) {
+                        this.result += "self";
+                        if (callExpression.arguments.length)
+                            this.result += ", ";
                     }
-                    this.currentClassDeclaration = classExpression;
-                    this.needClass = true;
-                    this.result += "__class(";
-                    if (classExpression.heritageClauses) {
-                        this.writeHeritage(classExpression, tabs, node);
-                    }
-                    else {
-                        this.result += "nil";
-                    }
-                    this.result += ", {\n";
-                    this.writeClassMembers(classExpression.members, tabs + 1, node);
-                    this.writeTabs(tabs);
-                    this.result += "})";
-                    if (this.classDeclarations.length > 0) {
-                        this.currentClassDeclaration = this.classDeclarations.pop();
-                    }
-                    else {
-                        this.currentClassDeclaration = undefined;
-                    }
-                    break;
+                    this.writeArray(callExpression.arguments, tabs, node);
+                    this.result += ")";
                 }
+                break;
+            }
+            case ts.SyntaxKind.ClassDeclaration: {
+                const classExpression = node;
+                if (this.currentClassDeclaration) {
+                    this.classDeclarations.push(this.currentClassDeclaration);
+                }
+                this.currentClassDeclaration = classExpression;
+                let className = undefined;
+                let isExport = false;
+                if (classExpression.name) {
+                    isExport = this.writeLocalOrExport(classExpression);
+                    this.traverse(classExpression.name, tabs, node);
+                    className = classExpression.name.text;
+                    if (isExport) {
+                        this.exportedVariables[className] = true;
+                    }
+                    this.result += " = ";
+                }
+                this.luaLib |= 1 /* Class */;
+                this.result += "__class(";
+                if (!this.writeHeritage(classExpression, tabs, node)) {
+                    this.result += "nil";
+                }
+                this.result += ", {\n";
+                this.writeClassMembers(classExpression.members, tabs + 1, node);
+                if (this.classDeclarations.length > 0) {
+                    this.currentClassDeclaration = this.classDeclarations.pop();
+                }
+                else {
+                    this.currentClassDeclaration = undefined;
+                }
+                this.writeTabs(tabs);
+                this.result += "})\n";
+                break;
+            }
+            case ts.SyntaxKind.ClassExpression: {
+                const classExpression = node;
+                if (this.currentClassDeclaration) {
+                    this.classDeclarations.push(this.currentClassDeclaration);
+                }
+                this.currentClassDeclaration = classExpression;
+                this.luaLib |= 1 /* Class */;
+                this.result += "__class(";
+                if (classExpression.heritageClauses) {
+                    this.writeHeritage(classExpression, tabs, node);
+                }
+                else {
+                    this.result += "nil";
+                }
+                this.result += ", {\n";
+                this.writeClassMembers(classExpression.members, tabs + 1, node);
+                this.writeTabs(tabs);
+                this.result += "})";
+                if (this.classDeclarations.length > 0) {
+                    this.currentClassDeclaration = this.classDeclarations.pop();
+                }
+                else {
+                    this.currentClassDeclaration = undefined;
+                }
+                break;
+            }
             case ts.SyntaxKind.ComputedPropertyName:
                 const computedPropertyName = node;
                 this.result += "[";
                 this.traverse(computedPropertyName.expression, tabs, node);
                 this.result += "]";
                 break;
-            case ts.SyntaxKind.Constructor:
-                {
-                    const constr = node;
-                    this.writeTabs(tabs);
-                    this.result += "constructor = function(self";
-                    if (constr.parameters.length > 0) {
-                        this.result += ", ";
-                        this.writeArray(constr.parameters, tabs, node);
+            case ts.SyntaxKind.ConditionalExpression: {
+                const conditionalExpression = node;
+                const trueType = this.typeChecker.getTypeAtLocation(conditionalExpression.whenTrue);
+                const needWrap = trueType.flags & (ts.TypeFlags.BooleanLike | ts.TypeFlags.StringLike | ts.TypeFlags.NumberLike);
+                if (needWrap) {
+                    this.luaLib |= 2 /* Ternary */;
+                    this.result += "__ternaryUnwrap(";
+                }
+                this.result += "(";
+                this.traverse(conditionalExpression.condition, tabs, node);
+                this.result += " and ";
+                if (needWrap) {
+                    this.result += "__ternaryWrap(";
+                }
+                this.traverse(conditionalExpression.whenTrue, tabs, node);
+                if (needWrap) {
+                    this.result += ")";
+                }
+                this.result += ") or ";
+                this.traverse(conditionalExpression.whenFalse, tabs, node);
+                if (needWrap) {
+                    this.result += ")";
+                }
+                break;
+            }
+            case ts.SyntaxKind.Constructor: {
+                const constr = node;
+                this.writeTabs(tabs);
+                this.result += "constructor = function(self";
+                if (constr.parameters.length > 0) {
+                    this.result += ", ";
+                    this.writeArray(constr.parameters, tabs, node);
+                }
+                this.result += ")\n";
+                for (const parameter of constr.parameters) {
+                    if (parameter.modifiers && parameter.modifiers.some(x => x.kind === ts.SyntaxKind.PrivateKeyword || x.kind === ts.SyntaxKind.PublicKeyword)) {
+                        this.writeTabs(tabs + 1);
+                        this.result += `self.${parameter.name.getText()} = ${parameter.name.getText()}\n`;
                     }
-                    this.result += ")\n";
-                    for (const parameter of constr.parameters) {
-                        if (parameter.modifiers && parameter.modifiers.some(x => x.kind === ts.SyntaxKind.PrivateKeyword || x.kind === ts.SyntaxKind.PublicKeyword)) {
-                            this.writeTabs(tabs + 1);
-                            this.result += `self.${parameter.name.getText()} = ${parameter.name.getText()}\n`;
+                }
+                if (constr.parent) {
+                    for (const member of constr.parent.members) {
+                        if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
+                            const propertyDeclaration = member;
+                            if (propertyDeclaration.initializer === undefined)
+                                continue;
+                            if (propertyDeclaration.modifiers !== undefined && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword))
+                                continue;
+                            this.traverse(member, tabs + 1, constr.parent);
                         }
                     }
-                    if (constr.parent) {
-                        for (const member of constr.parent.members) {
-                            if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
-                                const propertyDeclaration = member;
-                                if (propertyDeclaration.initializer === undefined)
-                                    continue;
-                                if (propertyDeclaration.modifiers !== undefined && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword))
-                                    continue;
-                                this.traverse(member, tabs + 1, constr.parent);
-                            }
-                        }
-                    }
-                    if (constr.body)
-                        this.traverse(constr.body, tabs + 1, node);
-                    this.writeTabs(tabs);
-                    this.result += "end,\n";
-                    break;
                 }
-            case ts.SyntaxKind.DeleteExpression:
-                {
-                    const deleteExpression = node;
-                    this.traverse(deleteExpression.expression, tabs, node);
-                    this.result += " = nil";
-                    break;
-                }
-            case ts.SyntaxKind.DoStatement:
-                {
-                    const doStatement = node;
-                    this.writeTabs(tabs);
-                    this.result += "repeat\n";
-                    this.traverse(doStatement.statement, tabs + 1, node);
-                    this.writeTabs(tabs);
-                    this.result += "until not (";
-                    this.traverse(doStatement.expression, tabs, node);
-                    this.result += ")\n";
-                    break;
-                }
+                if (constr.body)
+                    this.traverse(constr.body, tabs + 1, node);
+                this.writeTabs(tabs);
+                this.result += "end,\n";
+                break;
+            }
+            case ts.SyntaxKind.DeleteExpression: {
+                const deleteExpression = node;
+                this.traverse(deleteExpression.expression, tabs, node);
+                this.result += " = nil";
+                break;
+            }
+            case ts.SyntaxKind.DoStatement: {
+                const doStatement = node;
+                this.writeTabs(tabs);
+                this.result += "repeat\n";
+                this.traverse(doStatement.statement, tabs + 1, node);
+                this.writeTabs(tabs);
+                this.result += "until not (";
+                this.traverse(doStatement.expression, tabs, node);
+                this.result += ")\n";
+                break;
+            }
             case ts.SyntaxKind.ElementAccessExpression:
                 const elementAccessExpression = node;
                 this.traverse(elementAccessExpression.expression, tabs, node);
@@ -538,27 +564,25 @@ if not __exports then return end
                 break;
             case ts.SyntaxKind.EndOfFileToken:
                 break;
-            case ts.SyntaxKind.ExportAssignment:
-                {
-                    const exportAssignment = node;
-                    this.writeTabs(tabs);
-                    this.result += "for k,v in pairs(";
-                    this.traverse(exportAssignment.expression, tabs, node);
-                    this.result += ") do __exports[k] = v end\n";
-                    this.hasExportDefault = true;
-                    break;
-                }
+            case ts.SyntaxKind.ExportAssignment: {
+                const exportAssignment = node;
+                this.writeTabs(tabs);
+                this.result += "for k,v in pairs(";
+                this.traverse(exportAssignment.expression, tabs, node);
+                this.result += ") do __exports[k] = v end\n";
+                this.hasExportDefault = true;
+                break;
+            }
             case ts.SyntaxKind.ExpressionStatement:
                 this.writeTabs(tabs);
                 this.traverse(node.expression, tabs, node);
                 this.result += "\n";
                 break;
-            case ts.SyntaxKind.ExpressionWithTypeArguments:
-                {
-                    const expressionWithTypeArguments = node;
-                    this.traverse(expressionWithTypeArguments.expression, tabs, node);
-                    break;
-                }
+            case ts.SyntaxKind.ExpressionWithTypeArguments: {
+                const expressionWithTypeArguments = node;
+                this.traverse(expressionWithTypeArguments.expression, tabs, node);
+                break;
+            }
             case ts.SyntaxKind.FalseKeyword:
                 this.result += "false";
                 break;
@@ -630,40 +654,39 @@ if not __exports then return end
                 this.writeTabs(tabs);
                 this.result += "end\n";
                 break;
-            case ts.SyntaxKind.FunctionDeclaration:
-                {
-                    const functionDeclaration = node;
-                    if (!functionDeclaration.body)
-                        break;
-                    const symbol = functionDeclaration.name && this.typeChecker.getSymbolAtLocation(functionDeclaration.name);
-                    const isExport = this.hasExportModifier(functionDeclaration);
-                    const isForwardDeclared = !isExport && symbol && this.forwardUsedLocalSymbols.get(symbol);
-                    if (!isForwardDeclared)
-                        this.writeLocalOrExport(functionDeclaration);
-                    if (functionDeclaration.name) {
-                        if (!isExport) {
-                            if (!isForwardDeclared && symbol) {
-                                this.result += "function ";
-                                this.forwardUsedLocalSymbols.set(symbol, false);
-                            }
-                        }
-                        this.traverse(functionDeclaration.name, tabs, node, { export: isExport });
-                    }
-                    if (isExport || isForwardDeclared) {
-                        this.result += " = function(";
-                    }
-                    else {
-                        this.result += "(";
-                    }
-                    this.writeArray(functionDeclaration.parameters, tabs, node);
-                    this.result += ")\n";
-                    if (functionDeclaration.body) {
-                        this.traverse(functionDeclaration.body, tabs + 1, node);
-                    }
-                    this.writeTabs(tabs);
-                    this.result += "end\n";
+            case ts.SyntaxKind.FunctionDeclaration: {
+                const functionDeclaration = node;
+                if (!functionDeclaration.body)
                     break;
+                const symbol = functionDeclaration.name && this.typeChecker.getSymbolAtLocation(functionDeclaration.name);
+                const isExport = this.hasExportModifier(functionDeclaration);
+                const isForwardDeclared = !isExport && symbol && this.forwardUsedLocalSymbols.get(symbol);
+                if (!isForwardDeclared)
+                    this.writeLocalOrExport(functionDeclaration);
+                if (functionDeclaration.name) {
+                    if (!isExport) {
+                        if (!isForwardDeclared && symbol) {
+                            this.result += "function ";
+                            this.forwardUsedLocalSymbols.set(symbol, false);
+                        }
+                    }
+                    this.traverse(functionDeclaration.name, tabs, node, { export: isExport });
                 }
+                if (isExport || isForwardDeclared) {
+                    this.result += " = function(";
+                }
+                else {
+                    this.result += "(";
+                }
+                this.writeArray(functionDeclaration.parameters, tabs, node);
+                this.result += ")\n";
+                if (functionDeclaration.body) {
+                    this.traverse(functionDeclaration.body, tabs + 1, node);
+                }
+                this.writeTabs(tabs);
+                this.result += "end\n";
+                break;
+            }
             case ts.SyntaxKind.FunctionExpression:
                 const functionExpression = node;
                 this.result += "function(";
@@ -822,12 +845,11 @@ if not __exports then return end
                     this.writeArray(newExpression.arguments, tabs, node);
                 this.result += ")";
                 break;
-            case ts.SyntaxKind.NonNullExpression:
-                {
-                    const nonNullExpression = node;
-                    this.traverse(nonNullExpression.expression, tabs, node);
-                    break;
-                }
+            case ts.SyntaxKind.NonNullExpression: {
+                const nonNullExpression = node;
+                this.traverse(nonNullExpression.expression, tabs, node);
+                break;
+            }
             case ts.SyntaxKind.Parameter:
                 const parameter = node;
                 this.traverse(parameter.name, tabs, node);
@@ -854,32 +876,31 @@ if not __exports then return end
                 }
                 this.traverse(prefixUnaryExpression.operand, tabs, node);
                 break;
-            case ts.SyntaxKind.PropertyAccessExpression:
-                {
-                    const access = node;
-                    this.traverse(access.expression, tabs, node);
-                    let isMethodCall = false;
-                    if (options && options.callee) {
-                        // const symbol = this.typeChecker.getSymbolAtLocation(access.expression);
-                        // if (symbol) {
-                        //     const typeOfSymbol = this.typeChecker.getTypeOfSymbolAtLocation(symbol, access.expression);
-                        //     const property = typeOfSymbol.getProperty(access.name.text);
-                        //     if (property && (property.flags & ts.SymbolFlags.Method)) {
-                        //         isMethodCall = true;
-                        //     }
-                        // }
-                        const symbol = this.typeChecker.getSymbolAtLocation(access);
-                        if (symbol !== undefined) {
-                            isMethodCall = (symbol.getFlags() & ts.SymbolFlags.Method) > 0;
-                        }
-                        else {
-                            this.addTextError(node, "Unable to know the type of this expression");
-                        }
+            case ts.SyntaxKind.PropertyAccessExpression: {
+                const access = node;
+                this.traverse(access.expression, tabs, node);
+                let isMethodCall = false;
+                if (options && options.callee) {
+                    // const symbol = this.typeChecker.getSymbolAtLocation(access.expression);
+                    // if (symbol) {
+                    //     const typeOfSymbol = this.typeChecker.getTypeOfSymbolAtLocation(symbol, access.expression);
+                    //     const property = typeOfSymbol.getProperty(access.name.text);
+                    //     if (property && (property.flags & ts.SymbolFlags.Method)) {
+                    //         isMethodCall = true;
+                    //     }
+                    // }
+                    const symbol = this.typeChecker.getSymbolAtLocation(access);
+                    if (symbol !== undefined) {
+                        isMethodCall = (symbol.getFlags() & ts.SymbolFlags.Method) > 0;
                     }
-                    this.result += isMethodCall ? ":" : ".";
-                    this.result += access.name.text;
-                    break;
+                    else {
+                        this.addTextError(node, "Unable to know the type of this expression");
+                    }
                 }
+                this.result += isMethodCall ? ":" : ".";
+                this.result += access.name.text;
+                break;
+            }
             case ts.SyntaxKind.PropertyAssignment:
                 const propertyAssignment = node;
                 this.writeTabs(tabs);
@@ -895,31 +916,29 @@ if not __exports then return end
                 this.result += " = ";
                 this.traverse(propertyAssignment.initializer, tabs, node);
                 break;
-            case ts.SyntaxKind.PropertyDeclaration:
-                {
-                    const propertyDeclaration = node;
-                    if (propertyDeclaration.initializer) {
-                        this.writeTabs(tabs);
-                        const staticProperty = propertyDeclaration.modifiers && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword);
-                        if (!staticProperty)
-                            this.result += "self.";
-                        this.traverse(propertyDeclaration.name, tabs, node);
-                        this.result += " = ";
-                        this.traverse(propertyDeclaration.initializer, tabs, node);
-                        if (staticProperty)
-                            this.result += ",";
-                        this.result += "\n";
-                    }
-                    break;
+            case ts.SyntaxKind.PropertyDeclaration: {
+                const propertyDeclaration = node;
+                if (propertyDeclaration.initializer) {
+                    this.writeTabs(tabs);
+                    const staticProperty = propertyDeclaration.modifiers && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword);
+                    if (!staticProperty)
+                        this.result += "self.";
+                    this.traverse(propertyDeclaration.name, tabs, node);
+                    this.result += " = ";
+                    this.traverse(propertyDeclaration.initializer, tabs, node);
+                    if (staticProperty)
+                        this.result += ",";
+                    this.result += "\n";
                 }
-            case ts.SyntaxKind.RegularExpressionLiteral:
-                {
-                    const regularExpressionLiteral = node;
-                    this.result += "Regex(";
-                    this.writeQuotedString(regularExpressionLiteral.text);
-                    this.result += ")";
-                    break;
-                }
+                break;
+            }
+            case ts.SyntaxKind.RegularExpressionLiteral: {
+                const regularExpressionLiteral = node;
+                this.result += "Regex(";
+                this.writeQuotedString(regularExpressionLiteral.text);
+                this.result += ")";
+                break;
+            }
             case ts.SyntaxKind.ReturnStatement:
                 this.writeTabs(tabs);
                 this.result += "return ";
@@ -940,48 +959,44 @@ if not __exports then return end
                 const stringLiteral = node;
                 this.writeQuotedString(stringLiteral.text);
                 break;
-            case ts.SyntaxKind.SuperKeyword:
-                {
-                    if (!this.currentClassDeclaration) {
-                        this.addTextError(node, "Unexpected super keyword outside of a class declaration");
-                        break;
-                    }
-                    this.writeHeritage(this.currentClassDeclaration, tabs, node);
-                    this.result += ".constructor";
+            case ts.SyntaxKind.SuperKeyword: {
+                if (!this.currentClassDeclaration) {
+                    this.addTextError(node, "Unexpected super keyword outside of a class declaration");
                     break;
                 }
-            case ts.SyntaxKind.TemplateExpression:
-                {
-                    const templateExpression = node;
-                    // for (const templateSpan of templateExpression.templateSpans) {
-                    if (templateExpression.head && templateExpression.head.text.length > 0) {
-                        this.traverse(templateExpression.head, tabs, node);
-                        if (templateExpression.templateSpans.length > 0)
-                            this.result += " .. ";
-                    }
-                    this.writeArray(templateExpression.templateSpans, tabs, node, " .. ");
-                    break;
-                }
-            case ts.SyntaxKind.TemplateHead:
-                {
-                    const templateHead = node;
-                    this.writeQuotedString(templateHead.text);
-                    break;
-                }
-            case ts.SyntaxKind.TemplateSpan:
-                {
-                    const templateSpan = node;
-                    if (templateSpan.expression.kind === ts.SyntaxKind.BinaryExpression)
-                        this.result += '(';
-                    this.traverse(templateSpan.expression, tabs, node);
-                    if (templateSpan.expression.kind === ts.SyntaxKind.BinaryExpression)
-                        this.result += ')';
-                    if (templateSpan.literal && templateSpan.literal.text.length > 0) {
+                this.writeHeritage(this.currentClassDeclaration, tabs, node);
+                this.result += ".constructor";
+                break;
+            }
+            case ts.SyntaxKind.TemplateExpression: {
+                const templateExpression = node;
+                // for (const templateSpan of templateExpression.templateSpans) {
+                if (templateExpression.head && templateExpression.head.text.length > 0) {
+                    this.traverse(templateExpression.head, tabs, node);
+                    if (templateExpression.templateSpans.length > 0)
                         this.result += " .. ";
-                        this.writeQuotedString(templateSpan.literal.text);
-                    }
-                    break;
                 }
+                this.writeArray(templateExpression.templateSpans, tabs, node, " .. ");
+                break;
+            }
+            case ts.SyntaxKind.TemplateHead: {
+                const templateHead = node;
+                this.writeQuotedString(templateHead.text);
+                break;
+            }
+            case ts.SyntaxKind.TemplateSpan: {
+                const templateSpan = node;
+                if (templateSpan.expression.kind === ts.SyntaxKind.BinaryExpression)
+                    this.result += '(';
+                this.traverse(templateSpan.expression, tabs, node);
+                if (templateSpan.expression.kind === ts.SyntaxKind.BinaryExpression)
+                    this.result += ')';
+                if (templateSpan.literal && templateSpan.literal.text.length > 0) {
+                    this.result += " .. ";
+                    this.writeQuotedString(templateSpan.literal.text);
+                }
+                break;
+            }
             case ts.SyntaxKind.ThisKeyword:
                 this.result += "self";
                 break;
@@ -991,12 +1006,11 @@ if not __exports then return end
             case ts.SyntaxKind.TypeAliasDeclaration:
                 // Type alias declaration is not needed
                 break;
-            case ts.SyntaxKind.TypeAssertionExpression:
-                {
-                    const typeAssertionExpression = node;
-                    this.traverse(typeAssertionExpression.expression, tabs, node);
-                    break;
-                }
+            case ts.SyntaxKind.TypeAssertionExpression: {
+                const typeAssertionExpression = node;
+                this.traverse(typeAssertionExpression.expression, tabs, node);
+                break;
+            }
             case ts.SyntaxKind.VariableDeclaration:
                 const variableDeclaration = node;
                 if (variableDeclaration.name.kind === ts.SyntaxKind.ArrayBindingPattern) {
