@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.LuaVisitor = void 0;
 const ts = require("typescript");
 const path = require("path");
 const typescript_1 = require("typescript");
@@ -47,16 +48,21 @@ class LuaVisitor {
     isStringBinaryOperator(binary) {
         const leftType = this.typeChecker.getTypeAtLocation(binary.left);
         const rightType = this.typeChecker.getTypeAtLocation(binary.right);
-        return ((leftType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) || (rightType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)));
+        return (leftType.flags &
+            (ts.TypeFlags.String | ts.TypeFlags.StringLiteral) ||
+            rightType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral));
     }
     getResult() {
         let hasExportedVariables = this.hasExportDefault;
-        const hasForwardDeclaredFunctions = Array.from(this.forwardUsedLocalSymbols).some(x => x[1]);
+        const hasForwardDeclaredFunctions = Array.from(this.forwardUsedLocalSymbols).some((x) => x[1]);
         for (const key in this.exportedVariables) {
             hasExportedVariables = true;
             break;
         }
-        if (this.imports.length > 0 || hasExportedVariables || this.luaLib || hasForwardDeclaredFunctions) {
+        if (this.imports.length > 0 ||
+            hasExportedVariables ||
+            this.luaLib ||
+            hasForwardDeclaredFunctions) {
             //             const moduleName = this.sourceFile.moduleName;
             //             const modules = this.imports.map(x => (x.module.indexOf(".") == 0 ? "./" : "") + path.join(path.dirname(moduleName), x.module).replace("\\", "/"));
             //             if (this.imports.length > 0) {
@@ -89,26 +95,38 @@ if not __exports then return end
             }
             if (this.luaLib) {
                 if (this.luaLib === 1 /* Class */) {
-                    prehambule += "local __class = LibStub:GetLibrary(\"tslib\").newClass\n";
+                    prehambule +=
+                        'local __class = LibStub:GetLibrary("tslib").newClass\n';
                 }
                 else {
-                    prehambule += "local __tslib = LibStub:GetLibrary(\"tslib\")\n";
+                    prehambule +=
+                        'local __tslib = LibStub:GetLibrary("tslib")\n';
                     if (this.luaLib & 1 /* Class */)
                         prehambule += "local __class = __tslib.newClass\n";
                     if (this.luaLib & 2 /* Ternary */)
-                        prehambule += "local __ternaryWrap = __tslib.ternaryWrap\nlocal __ternaryUnwrap = __tslib.ternaryUwrap\n";
+                        prehambule +=
+                            "local __ternaryWrap = __tslib.ternaryWrap\nlocal __ternaryUnwrap = __tslib.ternaryUwrap\n";
                 }
             }
             for (const imp of this.imports) {
                 let moduleVariableName;
-                if (imp.variables && imp.variables.every(x => x.usages == 0))
+                if (imp.variables && imp.variables.every((x) => x.usages == 0))
                     continue;
                 imp.hasCode = true;
                 if (globalModules[imp.module] === undefined) {
-                    moduleVariableName = imp.variable || "__" + imp.module.replace(/^@\w+\//, "").replace(/[^\w]/g, "");
+                    moduleVariableName =
+                        imp.variable ||
+                            "__" +
+                                imp.module
+                                    .replace(/^@\w+\//, "")
+                                    .replace(/[^\w]/g, "");
                     let fullModuleName;
                     if (imp.module.indexOf(".") == 0) {
-                        imp.path = path.join(path.dirname(this.sourceFile.fileName), imp.module).replace(this.rootDir, "").replace(/\\/g, "/").replace(/^\//, "");
+                        imp.path = path
+                            .join(path.dirname(this.sourceFile.fileName), imp.module)
+                            .replace(this.rootDir, "")
+                            .replace(/\\/g, "/")
+                            .replace(/^\//, "");
                         if (imp.path === "index") {
                             fullModuleName = this.appName;
                         }
@@ -139,11 +157,13 @@ if not __exports then return end
                 }
                 if (imp.variables) {
                     // Count usages because couldn't find how to filter out Interfaces or this kind of symbols
-                    for (const variable of imp.variables.filter(x => x.usages > 0)) {
-                        if (imp.module === "@wowts/lua" && variable.name === "kpairs") {
+                    for (const variable of imp.variables.filter((x) => x.usages > 0)) {
+                        if (imp.module === "@wowts/lua" &&
+                            variable.name === "kpairs") {
                             prehambule += `local ${variable.alias} = pairs\n`;
                         }
-                        else if (globalModules[imp.module] === ModuleType.WithoutObject) {
+                        else if (globalModules[imp.module] ===
+                            ModuleType.WithoutObject) {
                             prehambule += `local ${variable.alias} = ${variable.name}\n`;
                         }
                         else {
@@ -153,7 +173,11 @@ if not __exports then return end
                 }
             }
             if (hasForwardDeclaredFunctions) {
-                prehambule += Array.from(this.forwardUsedLocalSymbols).filter(x => x[1]).map(([s]) => `local ${s.name}`).join("\n") + "\n";
+                prehambule +=
+                    Array.from(this.forwardUsedLocalSymbols)
+                        .filter((x) => x[1])
+                        .map(([s]) => `local ${s.name}`)
+                        .join("\n") + "\n";
             }
             this.result = prehambule + this.result;
         }
@@ -185,7 +209,8 @@ if not __exports then return end
         for (const member of members) {
             if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
                 const propertyDeclaration = member;
-                if (propertyDeclaration.modifiers && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword)) {
+                if (propertyDeclaration.modifiers &&
+                    propertyDeclaration.modifiers.some((x) => x.kind === ts.SyntaxKind.StaticKeyword)) {
                     if (propertyDeclaration.initializer !== undefined)
                         this.traverse(member, tabs, node);
                     continue;
@@ -201,7 +226,8 @@ if not __exports then return end
         }
         if (propertyFound && !constructorFound) {
             this.writeTabs(tabs);
-            if (this.currentClassDeclaration.heritageClauses && this.currentClassDeclaration.heritageClauses.find(x => x.token === ts.SyntaxKind.ExtendsKeyword)) {
+            if (this.currentClassDeclaration.heritageClauses &&
+                this.currentClassDeclaration.heritageClauses.find((x) => x.token === ts.SyntaxKind.ExtendsKeyword)) {
                 this.result += "constructor = function(self, ...)\n";
                 this.writeTabs(tabs + 1);
                 this.writeHeritage(this.currentClassDeclaration, tabs, node);
@@ -213,7 +239,8 @@ if not __exports then return end
             for (const member of members) {
                 if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
                     const propertyDeclaration = member;
-                    if (propertyDeclaration.modifiers && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword))
+                    if (propertyDeclaration.modifiers &&
+                        propertyDeclaration.modifiers.some((x) => x.kind === ts.SyntaxKind.StaticKeyword))
                         continue;
                     if (propertyDeclaration.initializer === undefined)
                         continue;
@@ -262,7 +289,7 @@ if not __exports then return end
                 const binary = node;
                 if (binary.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
                     ts.isParenthesizedExpression(binary.left)) {
-                    this.traverse((binary.left.expression), tabs, node);
+                    this.traverse(binary.left.expression, tabs, node);
                 }
                 else {
                     this.traverse(binary.left, tabs, node);
@@ -362,7 +389,9 @@ if not __exports then return end
                         this.result += `{Binary ${ts.SyntaxKind[binary.operatorToken.kind]}}`;
                         break;
                 }
-                parenthesis = parenthesis && binary.right.kind === ts.SyntaxKind.BinaryExpression;
+                parenthesis =
+                    parenthesis &&
+                        binary.right.kind === ts.SyntaxKind.BinaryExpression;
                 if (parenthesis)
                     this.result += "(";
                 this.traverse(binary.right, tabs, node);
@@ -374,15 +403,17 @@ if not __exports then return end
                 this.traverse(bindingElement.name, tabs, node);
                 break;
             case ts.SyntaxKind.Block:
-                if (parent && (parent.kind == ts.SyntaxKind.Block || parent.kind == ts.SyntaxKind.SourceFile)) {
+                if (parent &&
+                    (parent.kind == ts.SyntaxKind.Block ||
+                        parent.kind == ts.SyntaxKind.SourceFile)) {
                     this.writeTabs(tabs);
                     this.result += "do\n";
-                    node.forEachChild(x => this.traverse(x, tabs + 1, node));
+                    node.forEachChild((x) => this.traverse(x, tabs + 1, node));
                     this.writeTabs(tabs);
                     this.result += "end\n";
                 }
                 else {
-                    node.forEachChild(x => this.traverse(x, tabs, node));
+                    node.forEachChild((x) => this.traverse(x, tabs, node));
                 }
                 break;
             case ts.SyntaxKind.BreakStatement:
@@ -400,9 +431,12 @@ if not __exports then return end
                     this.writeArray(callExpression.arguments, tabs, node);
                 }
                 else {
-                    this.traverse(callExpression.expression, tabs, node, { callee: true });
+                    this.traverse(callExpression.expression, tabs, node, {
+                        callee: true,
+                    });
                     this.result += "(";
-                    if (callExpression.expression.kind === ts.SyntaxKind.SuperKeyword) {
+                    if (callExpression.expression.kind ===
+                        ts.SyntaxKind.SuperKeyword) {
                         this.result += "self";
                         if (callExpression.arguments.length)
                             this.result += ", ";
@@ -481,7 +515,10 @@ if not __exports then return end
             case ts.SyntaxKind.ConditionalExpression: {
                 const conditionalExpression = node;
                 const trueType = this.typeChecker.getTypeAtLocation(conditionalExpression.whenTrue);
-                const needWrap = trueType.flags & (ts.TypeFlags.BooleanLike | ts.TypeFlags.StringLike | ts.TypeFlags.NumberLike);
+                const needWrap = trueType.flags &
+                    (ts.TypeFlags.BooleanLike |
+                        ts.TypeFlags.StringLike |
+                        ts.TypeFlags.NumberLike);
                 if (needWrap) {
                     this.luaLib |= 2 /* Ternary */;
                     this.result += "__ternaryUnwrap(";
@@ -513,7 +550,9 @@ if not __exports then return end
                 }
                 this.result += ")\n";
                 for (const parameter of constr.parameters) {
-                    if (parameter.modifiers && parameter.modifiers.some(x => x.kind === ts.SyntaxKind.PrivateKeyword || x.kind === ts.SyntaxKind.PublicKeyword)) {
+                    if (parameter.modifiers &&
+                        parameter.modifiers.some((x) => x.kind === ts.SyntaxKind.PrivateKeyword ||
+                            x.kind === ts.SyntaxKind.PublicKeyword)) {
                         this.writeTabs(tabs + 1);
                         this.result += `self.${parameter.name.getText()} = ${parameter.name.getText()}\n`;
                     }
@@ -524,7 +563,8 @@ if not __exports then return end
                             const propertyDeclaration = member;
                             if (propertyDeclaration.initializer === undefined)
                                 continue;
-                            if (propertyDeclaration.modifiers !== undefined && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword))
+                            if (propertyDeclaration.modifiers !== undefined &&
+                                propertyDeclaration.modifiers.some((x) => x.kind === ts.SyntaxKind.StaticKeyword))
                                 continue;
                             this.traverse(member, tabs + 1, constr.parent);
                         }
@@ -554,13 +594,13 @@ if not __exports then return end
                 break;
             }
             case ts.SyntaxKind.ElementAccessExpression:
-                const elementAccessExpression = node;
+                const elementAccessExpression = (node);
                 this.traverse(elementAccessExpression.expression, tabs, node);
-                this.result += '[';
+                this.result += "[";
                 if (elementAccessExpression.argumentExpression) {
                     this.traverse(elementAccessExpression.argumentExpression, tabs, node);
                 }
-                this.result += ']';
+                this.result += "]";
                 break;
             case ts.SyntaxKind.EndOfFileToken:
                 break;
@@ -608,27 +648,37 @@ if not __exports then return end
                     this.addTextError(node, "for statement needs a condition");
                     break;
                 }
-                if (forStatement.condition.kind !== ts.SyntaxKind.BinaryExpression) {
+                if (forStatement.condition.kind !==
+                    ts.SyntaxKind.BinaryExpression) {
                     this.addTextError(node, "for statement condition must be a binary expression");
                     break;
                 }
-                const binaryCondition = forStatement.condition;
+                const binaryCondition = (forStatement.condition);
                 if (!forStatement.incrementor) {
                     this.addTextError(node, "for statement needs an incrementor");
                     break;
                 }
-                if (forStatement.incrementor.kind !== ts.SyntaxKind.BinaryExpression) {
-                    this.addTextError(node, "for statement incrementor must be a binary expression");
-                    break;
-                }
-                const binaryIncrementor = forStatement.incrementor;
-                if (binaryIncrementor.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken) {
+                if (forStatement.incrementor.kind ===
+                    ts.SyntaxKind.PostfixUnaryExpression) {
                     this.traverse(binaryCondition.right, tabs, node);
-                    this.result += ", ";
-                    this.traverse(binaryIncrementor.right, tabs, node);
+                    this.result += ", 1";
+                }
+                else if (forStatement.incrementor.kind ===
+                    ts.SyntaxKind.BinaryExpression) {
+                    const binaryIncrementor = (forStatement.incrementor);
+                    if (binaryIncrementor.operatorToken.kind ===
+                        ts.SyntaxKind.PlusEqualsToken) {
+                        this.traverse(binaryCondition.right, tabs, node);
+                        this.result += ", ";
+                        this.traverse(binaryIncrementor.right, tabs, node);
+                    }
+                    else {
+                        this.addTextError(node, "only supported incrementor is +=");
+                        break;
+                    }
                 }
                 else {
-                    this.addTextError(node, "only supported incrementor is +=");
+                    this.addTextError(node, "for statement incrementor must be a binary expression");
                     break;
                 }
                 this.result += " do\n";
@@ -640,8 +690,9 @@ if not __exports then return end
                 this.writeTabs(tabs);
                 this.result += "for ";
                 const forOfStatement = node;
-                if (forOfStatement.initializer.kind === ts.SyntaxKind.ArrayLiteralExpression) {
-                    const initializer = forOfStatement.initializer;
+                if (forOfStatement.initializer.kind ===
+                    ts.SyntaxKind.ArrayLiteralExpression) {
+                    const initializer = (forOfStatement.initializer);
                     if (initializer.elements.length === 0) {
                         this.result += "_";
                     }
@@ -658,9 +709,12 @@ if not __exports then return end
                 const functionDeclaration = node;
                 if (!functionDeclaration.body)
                     break;
-                const symbol = functionDeclaration.name && this.typeChecker.getSymbolAtLocation(functionDeclaration.name);
+                const symbol = functionDeclaration.name &&
+                    this.typeChecker.getSymbolAtLocation(functionDeclaration.name);
                 const isExport = this.hasExportModifier(functionDeclaration);
-                const isForwardDeclared = !isExport && symbol && this.forwardUsedLocalSymbols.get(symbol);
+                const isForwardDeclared = !isExport &&
+                    symbol &&
+                    this.forwardUsedLocalSymbols.get(symbol);
                 if (!isForwardDeclared)
                     this.writeLocalOrExport(functionDeclaration);
                 if (functionDeclaration.name) {
@@ -670,7 +724,9 @@ if not __exports then return end
                             this.forwardUsedLocalSymbols.set(symbol, false);
                         }
                     }
-                    this.traverse(functionDeclaration.name, tabs, node, { export: isExport });
+                    this.traverse(functionDeclaration.name, tabs, node, {
+                        export: isExport,
+                    });
                 }
                 if (isExport || isForwardDeclared) {
                     this.result += " = function(";
@@ -720,16 +776,20 @@ if not __exports then return end
                     if (this.typeChecker) {
                         const symbol = this.typeChecker.getSymbolAtLocation(node);
                         if (symbol) {
-                            const isImported = (symbol.flags & ts.SymbolFlags.AliasExcludes) && this.importedVariables[identifier.text];
+                            const isImported = symbol.flags & ts.SymbolFlags.AliasExcludes &&
+                                this.importedVariables[identifier.text];
                             if (this.exports.indexOf(symbol) >= 0) {
                                 this.result += "__exports.";
                             }
-                            else if (!isImported && (symbol.flags & ts.SymbolFlags.Function) && !this.forwardUsedLocalSymbols.has(symbol)) {
+                            else if (!isImported &&
+                                symbol.flags & ts.SymbolFlags.Function &&
+                                !this.forwardUsedLocalSymbols.has(symbol)) {
                                 this.forwardUsedLocalSymbols.set(symbol, true);
                             }
                             // this.typeChecker.getRootSymbols(symbol)
                             if (isImported) {
-                                this.importedVariables[identifier.text].usages++;
+                                this.importedVariables[identifier.text]
+                                    .usages++;
                             }
                         }
                     }
@@ -752,7 +812,9 @@ if not __exports then return end
                     const innerStatement = ifStatement.elseStatement;
                     if (innerStatement.kind === ts.SyntaxKind.IfStatement) {
                         this.result += "elseif ";
-                        this.traverse(ifStatement.elseStatement, tabs, node, { elseIf: true });
+                        this.traverse(ifStatement.elseStatement, tabs, node, {
+                            elseIf: true,
+                        });
                     }
                     else {
                         this.result += "else\n";
@@ -771,25 +833,37 @@ if not __exports then return end
                 const importDeclaration = node;
                 if (!importDeclaration.importClause)
                     break;
-                const module = importDeclaration.moduleSpecifier;
+                const module = (importDeclaration.moduleSpecifier);
                 // if (module.text == "addon" && importDeclaration.importClause.name) {
                 //     this.addonModule = importDeclaration.importClause.name.text;
                 // }
-                // else 
+                // else
                 {
                     if (importDeclaration.importClause.name) {
-                        this.imports.push({ module: module.text, variable: importDeclaration.importClause.name.text });
+                        this.imports.push({
+                            module: module.text,
+                            variable: importDeclaration.importClause.name.text,
+                        });
                     }
                     else if (importDeclaration.importClause.namedBindings) {
                         // const moduleName =  "__" + module.text.replace(/[^\w]/g, "");
                         const variables = [];
-                        this.imports.push({ module: module.text, variables: variables });
+                        this.imports.push({
+                            module: module.text,
+                            variables: variables,
+                        });
                         const importClauseNamedBindings = importDeclaration.importClause.namedBindings;
                         if (typescript_1.isNamedImports(importClauseNamedBindings)) {
                             const namedImports = importClauseNamedBindings;
                             for (const variable of namedImports.elements) {
                                 const propertyName = variable.propertyName;
-                                const description = { name: propertyName ? propertyName.text : variable.name.text, usages: 0, alias: variable.name.text };
+                                const description = {
+                                    name: propertyName
+                                        ? propertyName.text
+                                        : variable.name.text,
+                                    usages: 0,
+                                    alias: variable.name.text,
+                                };
                                 variables.push(description);
                                 this.importedVariables[description.alias] = description;
                             }
@@ -807,7 +881,7 @@ if not __exports then return end
                 // Interfaces are skipped
                 break;
             case ts.SyntaxKind.ObjectLiteralExpression:
-                const objectLiteralExpression = node;
+                const objectLiteralExpression = (node);
                 if (objectLiteralExpression.properties.length > 0) {
                     this.result += "{\n";
                     this.writeArray(objectLiteralExpression.properties, tabs + 1, node, ",\n");
@@ -855,10 +929,10 @@ if not __exports then return end
                 this.traverse(parameter.name, tabs, node);
                 break;
             case ts.SyntaxKind.ParenthesizedExpression:
-                const parenthesizedExpression = node;
-                this.result += '(';
+                const parenthesizedExpression = (node);
+                this.result += "(";
                 this.traverse(parenthesizedExpression.expression, tabs, node);
-                this.result += ')';
+                this.result += ")";
                 break;
             case ts.SyntaxKind.PrefixUnaryExpression:
                 const prefixUnaryExpression = node;
@@ -867,7 +941,7 @@ if not __exports then return end
                         this.result += "-";
                         break;
                     case ts.SyntaxKind.ExclamationToken:
-                        this.result += ' not ';
+                        this.result += " not ";
                         break;
                     default:
                         this.errors.push(`Unsupported binary operator token ${ts.SyntaxKind[prefixUnaryExpression.operator]}`);
@@ -891,7 +965,8 @@ if not __exports then return end
                     // }
                     const symbol = this.typeChecker.getSymbolAtLocation(access);
                     if (symbol !== undefined) {
-                        isMethodCall = (symbol.getFlags() & ts.SymbolFlags.Method) > 0;
+                        isMethodCall =
+                            (symbol.getFlags() & ts.SymbolFlags.Method) > 0;
                     }
                     else {
                         this.addTextError(node, "Unable to know the type of this expression");
@@ -905,7 +980,8 @@ if not __exports then return end
                 const propertyAssignment = node;
                 this.writeTabs(tabs);
                 if (propertyAssignment.name.kind !== ts.SyntaxKind.Identifier &&
-                    propertyAssignment.name.kind !== ts.SyntaxKind.ComputedPropertyName) {
+                    propertyAssignment.name.kind !==
+                        ts.SyntaxKind.ComputedPropertyName) {
                     this.result += "[";
                     this.traverse(propertyAssignment.name, tabs, node);
                     this.result += "]";
@@ -920,7 +996,8 @@ if not __exports then return end
                 const propertyDeclaration = node;
                 if (propertyDeclaration.initializer) {
                     this.writeTabs(tabs);
-                    const staticProperty = propertyDeclaration.modifiers && propertyDeclaration.modifiers.some(x => x.kind === ts.SyntaxKind.StaticKeyword);
+                    const staticProperty = propertyDeclaration.modifiers &&
+                        propertyDeclaration.modifiers.some((x) => x.kind === ts.SyntaxKind.StaticKeyword);
                     if (!staticProperty)
                         this.result += "self.";
                     this.traverse(propertyDeclaration.name, tabs, node);
@@ -933,7 +1010,7 @@ if not __exports then return end
                 break;
             }
             case ts.SyntaxKind.RegularExpressionLiteral: {
-                const regularExpressionLiteral = node;
+                const regularExpressionLiteral = (node);
                 this.result += "Regex(";
                 this.writeQuotedString(regularExpressionLiteral.text);
                 this.result += ")";
@@ -949,7 +1026,7 @@ if not __exports then return end
                 this.result += "\n";
                 break;
             case ts.SyntaxKind.SourceFile:
-                node.forEachChild(x => this.traverse(x, tabs, node));
+                node.forEachChild((x) => this.traverse(x, tabs, node));
                 break;
             case ts.SyntaxKind.SpreadElement:
                 const spreadElement = node;
@@ -971,7 +1048,8 @@ if not __exports then return end
             case ts.SyntaxKind.TemplateExpression: {
                 const templateExpression = node;
                 // for (const templateSpan of templateExpression.templateSpans) {
-                if (templateExpression.head && templateExpression.head.text.length > 0) {
+                if (templateExpression.head &&
+                    templateExpression.head.text.length > 0) {
                     this.traverse(templateExpression.head, tabs, node);
                     if (templateExpression.templateSpans.length > 0)
                         this.result += " .. ";
@@ -986,12 +1064,15 @@ if not __exports then return end
             }
             case ts.SyntaxKind.TemplateSpan: {
                 const templateSpan = node;
-                if (templateSpan.expression.kind === ts.SyntaxKind.BinaryExpression)
-                    this.result += '(';
+                if (templateSpan.expression.kind ===
+                    ts.SyntaxKind.BinaryExpression)
+                    this.result += "(";
                 this.traverse(templateSpan.expression, tabs, node);
-                if (templateSpan.expression.kind === ts.SyntaxKind.BinaryExpression)
-                    this.result += ')';
-                if (templateSpan.literal && templateSpan.literal.text.length > 0) {
+                if (templateSpan.expression.kind ===
+                    ts.SyntaxKind.BinaryExpression)
+                    this.result += ")";
+                if (templateSpan.literal &&
+                    templateSpan.literal.text.length > 0) {
                     this.result += " .. ";
                     this.writeQuotedString(templateSpan.literal.text);
                 }
@@ -1013,8 +1094,9 @@ if not __exports then return end
             }
             case ts.SyntaxKind.VariableDeclaration:
                 const variableDeclaration = node;
-                if (variableDeclaration.name.kind === ts.SyntaxKind.ArrayBindingPattern) {
-                    const arrayBindingPattern = variableDeclaration.name;
+                if (variableDeclaration.name.kind ===
+                    ts.SyntaxKind.ArrayBindingPattern) {
+                    const arrayBindingPattern = (variableDeclaration.name);
                     if (arrayBindingPattern.elements.length == 0)
                         this.result += "_";
                 }
@@ -1025,7 +1107,7 @@ if not __exports then return end
                 }
                 break;
             case ts.SyntaxKind.VariableDeclarationList:
-                const variableDeclarationList = node;
+                const variableDeclarationList = (node);
                 this.writeArray(variableDeclarationList.declarations, tabs, node, ", ", options);
                 break;
             case ts.SyntaxKind.VariableStatement:
@@ -1041,16 +1123,20 @@ if not __exports then return end
                 //             this.addonVariable = (<ts.BindingElement>left.elements[1]).name.getText();
                 //             break;
                 //         }
-                //     }                    
+                //     }
                 // }
-                if (this.hasExportModifier(variableStatement) && variableStatement.declarationList.declarations.every(x => x.initializer == undefined)) {
-                    for (const declaration of variableStatement.declarationList.declarations) {
+                if (this.hasExportModifier(variableStatement) &&
+                    variableStatement.declarationList.declarations.every((x) => x.initializer == undefined)) {
+                    for (const declaration of variableStatement.declarationList
+                        .declarations) {
                         this.exportedVariables[declaration.name.getText()] = true;
                     }
                     break;
                 }
                 const isExport = this.writeLocalOrExport(variableStatement);
-                this.traverse(variableStatement.declarationList, tabs, node, { export: isExport });
+                this.traverse(variableStatement.declarationList, tabs, node, {
+                    export: isExport,
+                });
                 this.result += "\n";
                 break;
             case ts.SyntaxKind.WhileStatement:
@@ -1074,7 +1160,7 @@ if not __exports then return end
                 this.writeTabs(tabs);
                 this.addError(node);
                 this.result += "{" + ts.SyntaxKind[node.kind] + "}\n";
-                node.forEachChild(x => this.traverse(x, tabs + 1, node));
+                node.forEachChild((x) => this.traverse(x, tabs + 1, node));
                 break;
         }
     }
@@ -1100,10 +1186,18 @@ if not __exports then return end
         }
     }
     hasExportModifier(node) {
-        return node.modifiers && node.modifiers.some(x => x.kind === ts.SyntaxKind.ExportKeyword);
+        return (node.modifiers &&
+            node.modifiers.some((x) => x.kind === ts.SyntaxKind.ExportKeyword));
     }
     writeQuotedString(text) {
-        this.result += '"' + text.replace(/\\/g, "\\\\").replace(/\r/g, "\\r").replace(/\n/g, "\\n").replace(/"/g, '\\"') + '"';
+        this.result +=
+            '"' +
+                text
+                    .replace(/\\/g, "\\\\")
+                    .replace(/\r/g, "\\r")
+                    .replace(/\n/g, "\\n")
+                    .replace(/"/g, '\\"') +
+                '"';
     }
 }
 exports.LuaVisitor = LuaVisitor;

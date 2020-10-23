@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.testTransform = exports.TestCompilerHost = void 0;
 const ts = require("typescript");
 const luavisitor_1 = require("../luavisitor");
 const package_extra_1 = require("../package-extra");

@@ -1,36 +1,36 @@
 {
-  "name": "@wowts/tstolua",
-  "version": "1.7.0",
-  "main": "./dist/index.js",
-  "bin": {
-    "tstolua": "./bin/tstolua"
-  },
-  "license": "MIT",
-  "author": {
-    "name": "Sidoine De Wispelaere"
-  },
-  "scripts": {
-    "prepare": "tsc -p .",
-    "watch": "tsc -w -p .",
-    "test": "ava",
-    "test:watch": "ava --watch",
-    "test:debug": "node node_modules/ava/profile.js"
-  },
-  "devDependencies": {
-    "@types/node": "^10",
-    "ava": "^2.4.0"
-  },
-  "dependencies": {
-    "commander": "^4.0.0",
-    "typescript": "^3.7.2"
-  },
-  "repository": {
-    "url": "https://github.com/Sidoine/tstolua"
-  },
-  "ava": {
-    "files": [
-      "dist/**/*.spec.js",
-      "!dist/index.js"
-    ]
-  }
+    "name": "@wowts/tstolua",
+    "version": "1.8.0",
+    "main": "./dist/index.js",
+    "bin": {
+        "tstolua": "./bin/tstolua"
+    },
+    "license": "MIT",
+    "author": {
+        "name": "Sidoine De Wispelaere"
+    },
+    "scripts": {
+        "prepare": "tsc -p .",
+        "watch": "tsc -w -p .",
+        "test": "ava",
+        "test:watch": "ava --watch",
+        "test:debug": "node node_modules/ava/profile.js"
+    },
+    "devDependencies": {
+        "@types/node": "^10",
+        "ava": "^2.4.0"
+    },
+    "dependencies": {
+        "commander": "^4.0.0",
+        "typescript": "^3.9.7"
+    },
+    "repository": {
+        "url": "https://github.com/Sidoine/tstolua"
+    },
+    "ava": {
+        "files": [
+            "dist/**/*.spec.js",
+            "!dist/index.js"
+        ]
+    }
 }

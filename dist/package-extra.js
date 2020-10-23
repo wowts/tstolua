@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.PackageExtras = exports.getAppName = void 0;
 /** Remove the team's name, and transform to PascalCase if there is a _ in the name */
 function getAppName(input) {
     let moduleName = input.replace(/^@\w+\//, "");
