@@ -340,7 +340,6 @@ if not __exports then return end
         parent: ts.Node | undefined,
         options?: Options
     ) {
-        if (parent) node.parent = parent;
         switch (node.kind) {
             case ts.SyntaxKind.ArrayBindingPattern:
                 const arrayBindingPattern = <ts.ArrayBindingPattern>node;

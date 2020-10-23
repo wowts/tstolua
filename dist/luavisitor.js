@@ -252,8 +252,6 @@ if not __exports then return end
         }
     }
     traverse(node, tabs, parent, options) {
-        if (parent)
-            node.parent = parent;
         switch (node.kind) {
             case ts.SyntaxKind.ArrayBindingPattern:
                 const arrayBindingPattern = node;
