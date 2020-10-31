@@ -409,4 +409,13 @@ for i = 0, 5, 1 do
 end
 `);
 });
+ava_1.default.only("const enum", (t) => {
+    t.is(compiler_1.testTransform(t, `const enum Test {
+        One,
+        Two
+}
+    let toto: Test = Test.Two;
+`), `local toto = 1
+`);
+});
 //# sourceMappingURL=luavisitor.spec.js.map

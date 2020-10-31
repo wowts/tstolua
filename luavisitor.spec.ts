@@ -615,3 +615,19 @@ end
 `
     );
 });
+
+test.only("const enum", (t) => {
+    t.is(
+        testTransform(
+            t,
+            `const enum Test {
+        One,
+        Two
+}
+    let toto: Test = Test.Two;
+`
+        ),
+        `local toto = 1
+`
+    );
+});

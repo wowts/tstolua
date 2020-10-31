@@ -709,6 +709,8 @@ if not __exports then return end
                 break;
             case ts.SyntaxKind.EndOfFileToken:
                 break;
+            case ts.SyntaxKind.EnumDeclaration:
+                break;
             case ts.SyntaxKind.ExportAssignment: {
                 const exportAssignment = <ts.ExportAssignment>node;
                 this.writeTabs(tabs);
@@ -1126,6 +1128,33 @@ if not __exports then return end
                 break;
             case ts.SyntaxKind.PropertyAccessExpression: {
                 const access = <ts.PropertyAccessExpression>node;
+                const type = this.typeChecker.getTypeAtLocation(node);
+                if (type.symbol.flags & ts.SymbolFlags.EnumMember) {
+                    const propertyValueDeclaration = this.typeChecker.getTypeAtLocation(
+                        node
+                    ).symbol.valueDeclaration;
+                    if (
+                        propertyValueDeclaration &&
+                        propertyValueDeclaration.kind ===
+                            ts.SyntaxKind.EnumMember
+                    ) {
+                        const enumMember = propertyValueDeclaration as ts.EnumMember;
+                        if (enumMember.initializer) {
+                            this.result += this.traverse(
+                                enumMember.initializer,
+                                tabs,
+                                node
+                            );
+                        } else {
+                            // TODO better calculation (in case of intermediate values that initialize the const)
+                            this.result += enumMember.parent.members.indexOf(
+                                enumMember
+                            );
+                        }
+                        break;
+                    }
+                }
+
                 this.traverse(access.expression, tabs, node);
 
                 let isMethodCall = false;
