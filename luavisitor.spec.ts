@@ -674,3 +674,19 @@ test("const enum with initializer", (t) => {
 `
     );
 });
+
+test.only("variadic parameters", (t) => {
+    t.is(
+        testTransform(
+            t,
+            `function test(a: string, ...params: string[]) {
+    blabla(params);
+}
+`
+        ),
+        `local function test(a, ...)
+    blabla(...)
+end
+`
+    );
+});

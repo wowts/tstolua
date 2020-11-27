@@ -948,6 +948,15 @@ if not __exports then return end
                             node
                         );
                         if (symbol) {
+                            if (
+                                symbol.valueDeclaration.kind ===
+                                    ts.SyntaxKind.Parameter &&
+                                (symbol.valueDeclaration as ts.ParameterDeclaration)
+                                    .dotDotDotToken
+                            ) {
+                                this.result += "...";
+                                break;
+                            }
                             const isImported =
                                 symbol.flags & ts.SymbolFlags.AliasExcludes &&
                                 this.importedVariables[identifier.text];
@@ -1113,7 +1122,11 @@ if not __exports then return end
             }
             case ts.SyntaxKind.Parameter:
                 const parameter = <ts.ParameterDeclaration>node;
-                this.traverse(parameter.name, tabs, node);
+                if (parameter.dotDotDotToken) {
+                    this.result += "...";
+                } else {
+                    this.traverse(parameter.name, tabs, node);
+                }
                 break;
             case ts.SyntaxKind.ParenthesizedExpression:
                 const parenthesizedExpression = <ts.ParenthesizedExpression>(
