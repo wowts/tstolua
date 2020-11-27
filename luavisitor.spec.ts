@@ -45,11 +45,38 @@ test("table iteration", (t) => {
     t.is(
         testTransform(
             t,
-            `for (let k = lualength(test); k >= 1; k += -1) {
+            `import { lualength } from "@wowts/lua";
+            for (let k = lualength(test); k >= 1; k += -1) {
 }`
         ),
         `for k = #test, 1, -1 do
 end
+`
+    );
+});
+
+test("lualength", (t) => {
+    t.is(
+        testTransform(
+            t,
+            `import { lualength as length } from "@wowts/lua";
+const a = length({})`
+        ),
+        `local a = #{}
+`
+    );
+});
+
+test("truthy and pack", (t) => {
+    t.is(
+        testTransform(
+            t,
+            `import { truthy, pack } from "@wowts/lua";
+const a = pack(1, 2, 3)
+const b = truthy({})`
+        ),
+        `local a = {1, 2, 3}
+local b = {}
 `
     );
 });
@@ -616,7 +643,7 @@ end
     );
 });
 
-test.only("const enum", (t) => {
+test("const enum", (t) => {
     t.is(
         testTransform(
             t,
@@ -628,6 +655,22 @@ test.only("const enum", (t) => {
 `
         ),
         `local toto = 1
+`
+    );
+});
+
+test("const enum with initializer", (t) => {
+    t.is(
+        testTransform(
+            t,
+            `const enum Test {
+        One = 256,
+        Two = 512
+}
+    let toto: Test = Test.Two;
+`
+        ),
+        `local toto = 512
 `
     );
 });

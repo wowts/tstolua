@@ -14,6 +14,7 @@ interface ImportVariable {
     alias: string;
     name: string;
     usages: number;
+    module: string;
 }
 
 interface Import {
@@ -511,11 +512,28 @@ if not __exports then return end
             case ts.SyntaxKind.CallExpression: {
                 const callExpression = <ts.CallExpression>node;
                 const text = callExpression.expression.getText();
-                if (text === "lualength") {
+                const importedVariable = this.importedVariables[text];
+                if (
+                    importedVariable &&
+                    importedVariable.name === "lualength" &&
+                    importedVariable.module === "@wowts/lua"
+                ) {
                     this.result += "#";
                     this.writeArray(callExpression.arguments, tabs, node);
-                } else if (text === "truthy") {
+                } else if (
+                    importedVariable &&
+                    importedVariable.name === "truthy" &&
+                    importedVariable.module === "@wowts/lua"
+                ) {
                     this.writeArray(callExpression.arguments, tabs, node);
+                } else if (
+                    importedVariable &&
+                    importedVariable.name === "pack" &&
+                    importedVariable.module === "@wowts/lua"
+                ) {
+                    this.result += "{";
+                    this.writeArray(callExpression.arguments, tabs, node);
+                    this.result += "}";
                 } else {
                     this.traverse(callExpression.expression, tabs, node, {
                         callee: true,
@@ -1023,6 +1041,7 @@ if not __exports then return end
                                         : variable.name.text,
                                     usages: 0,
                                     alias: variable.name.text,
+                                    module: module.text,
                                 };
                                 variables.push(description);
                                 this.importedVariables[
@@ -1129,7 +1148,11 @@ if not __exports then return end
             case ts.SyntaxKind.PropertyAccessExpression: {
                 const access = <ts.PropertyAccessExpression>node;
                 const type = this.typeChecker.getTypeAtLocation(node);
-                if (type.symbol.flags & ts.SymbolFlags.EnumMember) {
+                if (
+                    type &&
+                    type.symbol &&
+                    type.symbol.flags & ts.SymbolFlags.EnumMember
+                ) {
                     const propertyValueDeclaration = this.typeChecker.getTypeAtLocation(
                         node
                     ).symbol.valueDeclaration;
@@ -1140,11 +1163,7 @@ if not __exports then return end
                     ) {
                         const enumMember = propertyValueDeclaration as ts.EnumMember;
                         if (enumMember.initializer) {
-                            this.result += this.traverse(
-                                enumMember.initializer,
-                                tabs,
-                                node
-                            );
+                            this.traverse(enumMember.initializer, tabs, node);
                         } else {
                             // TODO better calculation (in case of intermediate values that initialize the const)
                             this.result += enumMember.parent.members.indexOf(
