@@ -81,6 +81,22 @@ local b = {}
     );
 });
 
+test("pack with args", (t) => {
+    t.is(
+        testTransform(
+            t,
+            `import { pack } from "@wowts/lua";
+function test(...params: any[]) {
+    const a = pack(...(params as any));
+}`
+        ),
+        `local function test(...)
+    local a = {...}
+end
+`
+    );
+});
+
 test("class inheritance", (t) => {
     t.is(
         testTransform(
@@ -675,7 +691,7 @@ test("const enum with initializer", (t) => {
     );
 });
 
-test.only("variadic parameters", (t) => {
+test("variadic parameters", (t) => {
     t.is(
         testTransform(
             t,

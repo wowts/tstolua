@@ -2,4 +2,5 @@
 *.log
 /.vscode
 *.orig
-/dist
+tslint.json
+tsconfig.json

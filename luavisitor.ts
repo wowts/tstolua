@@ -949,6 +949,7 @@ if not __exports then return end
                         );
                         if (symbol) {
                             if (
+                                symbol.valueDeclaration &&
                                 symbol.valueDeclaration.kind ===
                                     ts.SyntaxKind.Parameter &&
                                 (symbol.valueDeclaration as ts.ParameterDeclaration)
@@ -1128,14 +1129,20 @@ if not __exports then return end
                     this.traverse(parameter.name, tabs, node);
                 }
                 break;
-            case ts.SyntaxKind.ParenthesizedExpression:
+            case ts.SyntaxKind.ParenthesizedExpression: {
                 const parenthesizedExpression = <ts.ParenthesizedExpression>(
                     node
                 );
-                this.result += "(";
+                const parenthesis =
+                    parenthesizedExpression.expression.kind !==
+                        ts.SyntaxKind.AsExpression ||
+                    (parenthesizedExpression.expression as ts.AsExpression)
+                        .expression.kind !== ts.SyntaxKind.Identifier;
+                if (parenthesis) this.result += "(";
                 this.traverse(parenthesizedExpression.expression, tabs, node);
-                this.result += ")";
+                if (parenthesis) this.result += ")";
                 break;
+            }
             case ts.SyntaxKind.PrefixUnaryExpression:
                 const prefixUnaryExpression = <ts.PrefixUnaryExpression>node;
                 switch (prefixUnaryExpression.operator) {
