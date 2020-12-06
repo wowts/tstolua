@@ -183,9 +183,9 @@ if not __exports then return end
                         prehambule += `local ${moduleVariableName} = LibStub:GetLibrary("${fullModuleName}")\n`;
                     } else {
                         const extras = this.packageExtras.getExtras(imp.module);
-                        let moduleName = extras.name;
+                        let moduleName = extras.lua.name;
                         fullModuleName = `"${moduleName}"`;
-                        if (extras.isGlobal) {
+                        if (extras.lua?.isGlobal) {
                             prehambule += `local ${moduleVariableName} = ${moduleName}\n`;
                         } else if (
                             globalModules[imp.module] === ModuleType.WithObject
