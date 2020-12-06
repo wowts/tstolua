@@ -1,6 +1,6 @@
 {
     "name": "@wowts/tstolua",
-    "version": "1.11.4",
+    "version": "1.12.0",
     "main": "./dist/index.js",
     "bin": {
         "tstolua": "./bin/tstolua"
@@ -21,11 +21,11 @@
         "ava": "^2.4.0"
     },
     "dependencies": {
+        "@types/degit": "^2.8.0",
         "commander": "^4.0.0",
-        "typescript": "^4.1.2",
-        "webdav": "^3.6.1",
         "degit": "^2.8.0",
-        "@types/degit": "^2.8.0"
+        "typescript": "^4.1.2",
+        "webdav": "^3.6.1"
     },
     "repository": {
         "url": "https://github.com/wowts/tstolua"
