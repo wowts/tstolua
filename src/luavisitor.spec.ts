@@ -1,26 +1,23 @@
-import { default as test } from "ava";
-import { testTransform } from "./helpers/compiler";
+import { test, expect } from "@jest/globals";
+import { testTransform } from "./testhelpers/compiler";
 
-test("simple assignation", (t) => {
-    t.is(
-        testTransform(t, "let a = 2 + 3;"),
+test("simple assignation", () => {
+    expect(testTransform("let a = 2 + 3;")).toBe(
         `local a = 2 + 3
 `
     );
 });
 
-test("function call", (t) => {
-    t.is(
-        testTransform(t, "a.b = a.c(a.d)", true),
+test("function call", () => {
+    expect(testTransform("a.b = a.c(a.d)", true)).toBe(
         `a.b = a.c(a.d)
 `
     );
 });
 
-test("if else", (t) => {
-    t.is(
+test("if else", () => {
+    expect(
         testTransform(
-            t,
             `if (!a != 4) {
     b = 3.5;
 } else if (a == 4) {
@@ -29,7 +26,8 @@ test("if else", (t) => {
     c = 4;
 }
 `
-        ),
+        )
+    ).toBe(
         `if  not a ~= 4 then
     b = 3.5
 elseif a == 4 then
@@ -41,55 +39,53 @@ end
     );
 });
 
-test("table iteration", (t) => {
-    t.is(
+test("table iteration", () => {
+    expect(
         testTransform(
-            t,
             `import { lualength } from "@wowts/lua";
             for (let k = lualength(test); k >= 1; k += -1) {
 }`
-        ),
+        )
+    ).toBe(
         `for k = #test, 1, -1 do
 end
 `
     );
 });
 
-test("lualength", (t) => {
-    t.is(
+test("lualength", () => {
+    expect(
         testTransform(
-            t,
             `import { lualength as length } from "@wowts/lua";
 const a = length({})`
-        ),
+        )
+    ).toBe(
         `local a = #{}
 `
     );
 });
 
-test("truthy and pack", (t) => {
-    t.is(
-        testTransform(
-            t,
-            `import { truthy, pack } from "@wowts/lua";
+test("truthy and pack", () => {
+    expect(
+        testTransform(`import { truthy, pack } from "@wowts/lua";
 const a = pack(1, 2, 3)
-const b = truthy({})`
-        ),
+const b = truthy({})`)
+    ).toBe(
         `local a = {1, 2, 3}
 local b = {}
 `
     );
 });
 
-test("pack with args", (t) => {
-    t.is(
+test("pack with args", () => {
+    expect(
         testTransform(
-            t,
             `import { pack } from "@wowts/lua";
 function test(...params: any[]) {
     const a = pack(...(params as any));
 }`
-        ),
+        )
+    ).toBe(
         `local function test(...)
     local a = {...}
 end
@@ -97,16 +93,16 @@ end
     );
 });
 
-test("class inheritance", (t) => {
-    t.is(
+test("class inheritance", () => {
+    expect(
         testTransform(
-            t,
             `class Test extends Base {
         constructor() {
             super(16);
         }
 }`
-        ),
+        )
+    ).toBe(
         `local __class = LibStub:GetLibrary("tslib").newClass
 local Test = __class(Base, {
     constructor = function(self)
@@ -117,17 +113,17 @@ local Test = __class(Base, {
     );
 });
 
-test.skip("module import", (t) => {
-    t.is(
+test.skip("module import", () => {
+    expect(
         testTransform(
-            t,
             `import { OvaleScripts } from "./OvaleScripts";
 let a = OvaleScripts;
 import Test from 'Test';
 import AceAddon from "ace_addon-3.0";
 export const bla = 3;
 `
-        ),
+        )
+    ).toBe(
         `local __exports = LibStub:NewLibrary("test/source", 1)
 if not __exports then return end
 local __OvaleScripts = LibStub:GetLibrary("test/testfiles/test5/OvaleScripts")
@@ -140,10 +136,9 @@ __exports.bla = 3
     );
 });
 
-test("litteral object", (t) => {
-    t.is(
+test("litteral object", () => {
+    expect(
         testTransform(
-            t,
             `let a = {
         TEST: 'a',
         ["a"]: 'b',
@@ -152,7 +147,8 @@ test("litteral object", (t) => {
         }
     }
     `
-        ),
+        )
+    ).toBe(
         `local a = {
     TEST = "a",
     ["a"] = "b",
@@ -164,10 +160,9 @@ test("litteral object", (t) => {
     );
 });
 
-test("class inheritance with property access", (t) => {
-    t.is(
+test("class inheritance with property access", () => {
+    expect(
         testTransform(
-            t,
             `class Test extends Base {
     a = 3;
     constructor(a) {
@@ -179,7 +174,8 @@ test("class inheritance with property access", (t) => {
     }
 }
     `
-        ),
+        )
+    ).toBe(
         `local __class = LibStub:GetLibrary("tslib").newClass
 local Test = __class(Base, {
     constructor = function(self, a)
@@ -194,9 +190,8 @@ local Test = __class(Base, {
     );
 });
 
-test("simple lambda function", (t) => {
-    t.is(
-        testTransform(t, `(a,b) => 18`),
+test("simple lambda function", () => {
+    expect(testTransform(`(a,b) => 18`)).toBe(
         `function(a, b)
     return 18
 end
@@ -204,16 +199,16 @@ end
     );
 });
 
-test("do while", (t) => {
-    t.is(
+test("do while", () => {
+    expect(
         testTransform(
-            t,
             `do {
         a = a + 1;
     }
     while (!(a > 5));
     `
-        ),
+        )
+    ).toBe(
         `repeat
     a = a + 1
 until not ( not (a > 5))
@@ -221,10 +216,9 @@ until not ( not (a > 5))
     );
 });
 
-test("dynamic class", (t) => {
-    t.is(
+test("dynamic class", () => {
+    expect(
         testTransform(
-            t,
             `return class extends Base {
     value = 3;
     constructor(...rest:any[]) {
@@ -236,7 +230,8 @@ test("dynamic class", (t) => {
     }
 }
     `
-        ),
+        )
+    ).toBe(
         `local __class = LibStub:GetLibrary("tslib").newClass
 return __class(Base, {
     constructor = function(self, ...)
@@ -251,20 +246,18 @@ return __class(Base, {
     );
 });
 
-test("+ opereator", (t) => {
-    t.is(testTransform(t, "3 + 3"), "3 + 3\n");
+test("+ opereator", () => {
+    expect(testTransform("3 + 3")).toBe("3 + 3\n");
 });
 
-test("for of with unused keys", (t) => {
-    t.is(
-        testTransform(t, "for (const [] of toto) {}"),
+test("for of with unused keys", () => {
+    expect(testTransform("for (const [] of toto) {}")).toBe(
         "for _ in toto do\nend\n"
     );
 });
 
-test("initialize an array with a number as key", (t) => {
-    t.is(
-        testTransform(t, "a = { 1: 'a' }"),
+test("initialize an array with a number as key", () => {
+    expect(testTransform("a = { 1: 'a' }")).toBe(
         `a = {
     [1] = "a"
 }
@@ -272,28 +265,28 @@ test("initialize an array with a number as key", (t) => {
     );
 });
 
-test("simple string template", (t) => {
-    t.is(testTransform(t, "`${'3'}${3}`"), '"3" .. 3\n');
+test("simple string template", () => {
+    expect(testTransform("`${'3'}${3}`")).toBe('"3" .. 3\n');
 });
 
-test("more complex template string", (t) => {
-    t.is(testTransform(t, "`z${'3'}${3}z`"), '"z" .. "3" .. 3 .. "z"\n');
+test("more complex template string", () => {
+    expect(testTransform("`z${'3'}${3}z`")).toBe('"z" .. "3" .. 3 .. "z"\n');
 });
 
-test("string template with parenthesis", (t) => {
-    t.is(testTransform(t, "`z${2 + 3}`"), '"z" .. (2 + 3)\n');
+test("string template with parenthesis", () => {
+    expect(testTransform("`z${2 + 3}`")).toBe('"z" .. (2 + 3)\n');
 });
 
-test("function that returns a new object that is declared after the call", (t) => {
-    t.is(
+test("function that returns a new object that is declared after the call", () => {
+    expect(
         testTransform(
-            t,
             `function a(){
     return new Test();
 }
 export class Test {}
 `
-        ),
+        )
+    ).toBe(
         `local __exports = LibStub:NewLibrary("test/source", 1)
 if not __exports then return end
 local __class = LibStub:GetLibrary("tslib").newClass
@@ -306,10 +299,9 @@ __exports.Test = __class(nil, {
     );
 });
 
-test("class with methods", (t) => {
-    t.is(
+test("class with methods", () => {
+    expect(
         testTransform(
-            t,
             `class Test {
     a: (a) => number;
     b(c):number {}
@@ -326,7 +318,8 @@ const a:Test;
 a.a(18);
 a.b(23);
 `
-        ),
+        )
+    ).toBe(
         `local __class = LibStub:GetLibrary("tslib").newClass
 local Test = __class(nil, {
     b = function(self, c)
@@ -349,10 +342,9 @@ a:b(23)
     );
 });
 
-test.skip("class declaration with class extension", (t) => {
-    t.is(
+test.skip("class declaration with class extension", () => {
+    expect(
         testTransform(
-            t,
             `
 type Constructor<T> = new(...args: any[]) => T;    
 class Test {
@@ -374,7 +366,8 @@ function testCall(a: A) {
     a.a();
 }
 `
-        ),
+        )
+    ).toBe(
         `local __class = LibStub:GetLibrary("tslib").newClass
 local Test = __class(nil, {
     b = function(self)
@@ -401,16 +394,16 @@ end
     );
 });
 
-test("imports mock modules", (t) => {
-    t.is(
+test("imports mock modules", () => {
+    expect(
         testTransform(
-            t,
             `import { a, b } from "@wowts/table";
 import { c } from "@wowts/lua";
 const z = a;
 c();
     `
-        ),
+        )
+    ).toBe(
         `local a = table.a
 local c = c
 local z = a
@@ -419,14 +412,14 @@ c()
     );
 });
 
-test("class with inheritance but no explicit constructor", (t) => {
-    t.is(
+test("class with inheritance but no explicit constructor", () => {
+    expect(
         testTransform(
-            t,
             `class Test extends BaseClass {
     v = true
 }`
-        ),
+        )
+    ).toBe(
         `local __class = LibStub:GetLibrary("tslib").newClass
 local Test = __class(BaseClass, {
     constructor = function(self, ...)
@@ -438,14 +431,14 @@ local Test = __class(BaseClass, {
     );
 });
 
-test("class with interface inheritance but no explicit constructor", (t) => {
-    t.is(
+test("class with interface inheritance but no explicit constructor", () => {
+    expect(
         testTransform(
-            t,
             `class Test implements Interface {
     v = true
 }`
-        ),
+        )
+    ).toBe(
         `local __class = LibStub:GetLibrary("tslib").newClass
 local Test = __class(nil, {
     constructor = function(self)
@@ -456,24 +449,23 @@ local Test = __class(nil, {
     );
 });
 
-test("add strings", (t) => {
-    t.is(
-        testTransform(t, `"a" + 3`),
+test("add strings", () => {
+    expect(testTransform(`"a" + 3`)).toBe(
         `"a" .. 3
 `
     );
 });
 
-test("class with static property", (t) => {
-    t.is(
+test("class with static property", () => {
+    expect(
         testTransform(
-            t,
             `class Test {
     static v = true;
     static x = 2;
     static w;
 }`
-        ),
+        )
+    ).toBe(
         `local __class = LibStub:GetLibrary("tslib").newClass
 local Test = __class(nil, {
     v = true,
@@ -483,10 +475,9 @@ local Test = __class(nil, {
     );
 });
 
-test("class with static property and constructor", (t) => {
-    t.is(
+test("class with static property and constructor", () => {
+    expect(
         testTransform(
-            t,
             `class Test {
     static v = true;
     static x = 2;
@@ -495,7 +486,8 @@ test("class with static property and constructor", (t) => {
         let a = 2;
     }
 }`
-        ),
+        )
+    ).toBe(
         `local __class = LibStub:GetLibrary("tslib").newClass
 local Test = __class(nil, {
     v = true,
@@ -508,61 +500,60 @@ local Test = __class(nil, {
     );
 });
 
-test("+=", (t) => {
-    t.is(
+test("+=", () => {
+    expect(
         testTransform(
-            t,
             `let a = 3;
 a += 5;`
-        ),
+        )
+    ).toBe(
         `local a = 3
 a = a + 5
 `
     );
 });
 
-test("+= with strings", (t) => {
-    t.is(
+test("+= with strings", () => {
+    expect(
         testTransform(
-            t,
             `let a = "3";
 a += "5";`
-        ),
+        )
+    ).toBe(
         `local a = "3"
 a = a .. "5"
 `
     );
 });
 
-test("-=", (t) => {
-    t.is(
+test("-=", () => {
+    expect(
         testTransform(
-            t,
             `let a = 3;
 a -= 5;`
-        ),
+        )
+    ).toBe(
         `local a = 3
 a = a - 5
 `
     );
 });
 
-test("-= with parenthesis", (t) => {
-    t.is(
+test("-= with parenthesis", () => {
+    expect(
         testTransform(
-            t,
             `let a = 3;
 a -= 5 + 2;`
-        ),
+        )
+    ).toBe(
         `local a = 3
 a = a - (5 + 2)
 `
     );
 });
 
-test("object literal with string keys", (t) => {
-    t.is(
-        testTransform(t, `const a = { "foo": "bar", bar: "foo" }`),
+test("object literal with string keys", () => {
+    expect(testTransform(`const a = { "foo": "bar", bar: "foo" }`)).toBe(
         `local a = {
     ["foo"] = "bar",
     bar = "foo"
@@ -571,9 +562,8 @@ test("object literal with string keys", (t) => {
     );
 });
 
-test("object literal with number keys", (t) => {
-    t.is(
-        testTransform(t, `const a = { 2: "bar" }`),
+test("object literal with number keys", () => {
+    expect(testTransform(`const a = { 2: "bar" }`)).toBe(
         `local a = {
     [2] = "bar"
 }
@@ -581,17 +571,17 @@ test("object literal with number keys", (t) => {
     );
 });
 
-test("forward reference to local function", (t) => {
-    t.is(
+test("forward reference to local function", () => {
+    expect(
         testTransform(
-            t,
             `function a() {
     f(2);
 }
 function f(i: number) {
     return i * i;
 }`
-        ),
+        )
+    ).toBe(
         `local f
 local function a()
     f(2)
@@ -603,26 +593,26 @@ end
     );
 });
 
-test("cast on left side of an assignement", (t) => {
-    t.is(
+test("cast on left side of an assignement", () => {
+    expect(
         testTransform(
-            t,
             `let a: string;
 (<any>a) = "toto";`
-        ),
+        )
+    ).toBe(
         `local a
 a = "toto"
 `
     );
 });
 
-test("ternary on reference type", (t) => {
-    t.is(
+test("ternary on reference type", () => {
+    expect(
         testTransform(
-            t,
             `let a = { a: 3 };
 const b = true ? a : 2;`
-        ),
+        )
+    ).toBe(
         `local a = {
     a = 3
 }
@@ -631,9 +621,8 @@ local b = (true and a) or 2
     );
 });
 
-test("ternary on value type", (t) => {
-    t.is(
-        testTransform(t, `const b = true ? 3 : 2;`),
+test("ternary on value type", () => {
+    expect(testTransform(`const b = true ? 3 : 2;`)).toBe(
         `local __tslib = LibStub:GetLibrary("tslib")
 local __ternaryWrap = __tslib.ternaryWrap
 local __ternaryUnwrap = __tslib.ternaryUwrap
@@ -642,15 +631,15 @@ local b = __ternaryUnwrap((true and __ternaryWrap(3)) or 2)
     );
 });
 
-test("increment in a loop", (t) => {
-    t.is(
+test("increment in a loop", () => {
+    expect(
         testTransform(
-            t,
             `let a = 0;
     for (let i = 0; i<5; i ++) {
         a = a + 1;
     }`
-        ),
+        )
+    ).toBe(
         `local a = 0
 for i = 0, 5, 1 do
     a = a + 1
@@ -659,47 +648,47 @@ end
     );
 });
 
-test("const enum", (t) => {
-    t.is(
+test("const enum", () => {
+    expect(
         testTransform(
-            t,
             `const enum Test {
         One,
         Two
 }
     let toto: Test = Test.Two;
 `
-        ),
+        )
+    ).toBe(
         `local toto = 1
 `
     );
 });
 
-test("const enum with initializer", (t) => {
-    t.is(
+test("const enum with initializer", () => {
+    expect(
         testTransform(
-            t,
             `const enum Test {
         One = 256,
         Two = 512
 }
     let toto: Test = Test.Two;
 `
-        ),
+        )
+    ).toBe(
         `local toto = 512
 `
     );
 });
 
-test("variadic parameters", (t) => {
-    t.is(
+test("variadic parameters", () => {
+    expect(
         testTransform(
-            t,
             `function test(a: string, ...params: string[]) {
     blabla(params);
 }
 `
-        ),
+        )
+    ).toBe(
         `local function test(a, ...)
     blabla(...)
 end
