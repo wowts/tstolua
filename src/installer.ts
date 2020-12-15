@@ -20,7 +20,6 @@ import {
 import { createClient, WebdavClient } from "webdav";
 import degit from "degit";
 import child_process from "child_process";
-import { outputHelp } from "commander";
 
 function exec(command: string) {
     return new Promise((fulfil, reject) => {
@@ -35,16 +34,11 @@ function exec(command: string) {
     });
 }
 
-function canInstallPackage(mainPackage: PackageJson, x: PackageJson) {
-    return (
-        (!mainPackage.optionalDependencies ||
-            !mainPackage.optionalDependencies[x.name]) &&
-        !mainPackage.lua.parent
-    );
-}
-
 export class Installer {
-    constructor(private packages: PackageExtras) {}
+    constructor(
+        private packages: PackageExtras,
+        private mainPackage: PackageJson
+    ) {}
     private packagesToInstall: PackageJson[] = [];
 
     private parseLua(text: string, packageInfos: PackageJson) {
@@ -57,7 +51,10 @@ export class Installer {
                 referencePackageName
             );
             if (referencedPackage) {
-                if (!referencedPackage.lua.parent)
+                if (
+                    !referencedPackage.lua.parent &&
+                    !this.isPackageIgnored(referencedPackage.name)
+                )
                     packageInfos.dependencies[referencedPackage.name] = "*";
             } else {
                 const moduleName = getModuleName(referencePackageName);
@@ -239,7 +236,18 @@ export class Installer {
         }
     }
 
-    async install(outDir: string, mainPackage: PackageJson) {
+    private isPackageIgnored(packageName: string) {
+        return (
+            this.mainPackage.optionalDependencies &&
+            this.mainPackage.optionalDependencies[packageName]
+        );
+    }
+
+    canInstallPackage(x: PackageJson) {
+        return !this.isPackageIgnored(x.name) && !x.lua.parent;
+    }
+
+    async install(outDir: string) {
         const libStub = {
             version: "0",
             name: "@wowts/lib-stub",
@@ -255,20 +263,6 @@ export class Installer {
         this.packages.extra.set(libStub.name, libStub);
         this.packages.packageByLuaName.set(libStub.lua.name, libStub);
 
-        // const tslib = {
-        //     version: "0",
-        //     name: "@wowts/tslib",
-        //     lua: {
-        //         entry: "files.xml",
-        //         name: "tslib",
-        //     },
-        //     referencedBy: {},
-        //     references: [],
-        //     dependencies: {},
-        // };
-        // this.packages.extra.set(tslib.name, tslib);
-        // this.packages.packageByLuaName.set(tslib.lua.name, tslib);
-
         const libPath = join(outDir, "libs");
         if (!existsSync(libPath)) mkdirSync(libPath);
 
@@ -277,16 +271,12 @@ export class Installer {
         while (this.packagesToInstall.length > 0) {
             const packageJson = this.packagesToInstall.pop();
             if (packageJson === undefined) break;
-            if (
-                mainPackage.optionalDependencies &&
-                mainPackage.optionalDependencies[packageJson.name]
-            )
-                continue;
+            if (this.isPackageIgnored(packageJson.name)) continue;
             await this.downloadPackage(packageJson, libPath);
         }
-        const packageEntries = Array.from(
-            this.packages.extra.values()
-        ).filter((x) => canInstallPackage(mainPackage, x));
+        const packageEntries = Array.from(this.packages.extra.values()).filter(
+            (x) => !this.isPackageIgnored(x.name)
+        );
 
         const sources: PackageJson[] = [];
         for (const packageEntry of packageEntries) {
@@ -363,13 +353,13 @@ ${sortedSources
 
         writeFileSync(indexPath, output);
 
-        const lua = mainPackage.lua;
+        const lua = this.mainPackage.lua;
         if (lua) {
             const toc = `## Interface: ${lua.interface}
 ## Title: ${lua.title}
-## Notes: ${mainPackage.description}
-## Author: ${mainPackage.author}
-## Version: ${mainPackage.version}
+## Notes: ${this.mainPackage.description}
+## Author: ${this.mainPackage.author}
+## Version: ${this.mainPackage.version}
 ## OptionalDeps: LibStub, ${Array.from(this.packages.extra.values())
                 .map((x) => x.name)
                 .join(", ")}

@@ -1,6 +1,6 @@
 import * as path from "path";
-import { getAppName, PackageExtras, parsePackage } from "./package-extra";
-import * as ts from "typescript";
+import { PackageExtras, parsePackage } from "./package-extra";
+import ts from "typescript";
 import * as fs from "fs";
 import { LuaVisitor } from "./luavisitor";
 import { Installer } from "./installer";
@@ -258,8 +258,8 @@ export async function compile(
         );
 
         if (installDeps) {
-            const installer = new Installer(packageExtras);
-            await installer.install(outDir, packageInfos);
+            const installer = new Installer(packageExtras, packageInfos);
+            await installer.install(outDir);
         }
     }
 }

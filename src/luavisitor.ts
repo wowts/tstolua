@@ -926,23 +926,10 @@ if not __exports then return end
                 break;
             case ts.SyntaxKind.Identifier:
                 const identifier = <ts.Identifier>node;
-                if (identifier.text === "rest") {
-                    this.result += "...";
-                } else if (identifier.text === "undefined") {
+
+                if (identifier.text === "undefined") {
                     this.result += "nil";
-                } else if (identifier.text === "__args") {
-                    this.result += "...";
-                }
-                // else if (identifier.text === this.addonModule) {
-                //     this.result += "...";
-                // }
-                // else if (this.importedVariables[identifier.text]) {
-                //     this.result += this.importedVariables[identifier.text] + "." + identifier.text;
-                // }
-                // else if (this.exportedVariables[identifier.text]) {
-                //     this.result += "__exports." + identifier.text;
-                // }
-                else {
+                } else {
                     if (this.typeChecker) {
                         const symbol = this.typeChecker.getSymbolAtLocation(
                             node
@@ -958,22 +945,31 @@ if not __exports then return end
                                 this.result += "...";
                                 break;
                             }
-                            const isImported =
-                                symbol.flags & ts.SymbolFlags.AliasExcludes &&
-                                this.importedVariables[identifier.text];
+                            const importedVariable =
+                                symbol.flags & ts.SymbolFlags.AliasExcludes
+                                    ? this.importedVariables[identifier.text]
+                                    : undefined;
+
+                            if (
+                                importedVariable &&
+                                importedVariable.name === "version" &&
+                                importedVariable.module === "@wowts/lua"
+                            ) {
+                                this.result += `"${this.moduleVersion}"`;
+                                break;
+                            }
                             if (this.exports.indexOf(symbol) >= 0) {
                                 this.result += "__exports.";
                             } else if (
-                                !isImported &&
+                                importedVariable === undefined &&
                                 symbol.flags & ts.SymbolFlags.Function &&
                                 !this.forwardUsedLocalSymbols.has(symbol)
                             ) {
                                 this.forwardUsedLocalSymbols.set(symbol, true);
                             }
                             // this.typeChecker.getRootSymbols(symbol)
-                            if (isImported) {
-                                this.importedVariables[identifier.text]
-                                    .usages++;
+                            if (importedVariable) {
+                                importedVariable.usages++;
                             }
                         }
                     }

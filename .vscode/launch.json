@@ -5,7 +5,7 @@
             "type": "node",
             "request": "launch",
             "name": "Launch Program",
-            "program": "${workspaceRoot}/index.ts",
+            "program": "${workspaceRoot}/dist/index.js",
             "args": ["-p", "../Ovale/tsconfig.lua.json", "-i"],
             "outFiles": ["${workspaceRoot}/dist/**/*.js"],
             "protocol": "inspector"

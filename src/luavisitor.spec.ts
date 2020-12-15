@@ -695,3 +695,19 @@ end
 `
     );
 });
+
+test("version constant string", () => {
+    expect(
+        testTransform(`import { version } from "@wowts/lua";
+const toto = version;
+if (toto) {
+    const version = "z";
+    test(version);
+} `)
+    ).toBe(`local toto = "1"
+if toto then
+    local version = "z"
+    test(version)
+end
+`);
+});
