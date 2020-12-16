@@ -318,6 +318,7 @@ export class Installer {
             }
         }
 
+        let hasErrors = false;
         for (const source of packageEntries) {
             if (source.lua.entry && source.lua.name) {
                 const entryPath = join(
@@ -339,8 +340,10 @@ export class Installer {
                         .map((x) => x.name)
                         .join(",")}`
                 );
+                hasErrors = true;
             }
         }
+        if (hasErrors) process.exit(1);
 
         const output = `<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
