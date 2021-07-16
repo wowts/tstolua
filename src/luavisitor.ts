@@ -154,22 +154,7 @@ if not __exports then return end
                 }
             }
 
-            if (this.imports.length > 0) {
-                /*
-                 * Only create the __imports table if we are importing
-                 * anything not from a global module.
-                 */
-                let hasImports = false;
-                for (const imp of this.imports) {
-                    if (globalModules[imp.module] === undefined) {
-                        hasImports = true;
-                        break;
-                    }
-                }
-                if (hasImports) {
-                    prehambule += "local __imports = {}\n";
-                }
-            }
+            let hasImportsTable = false;
             for (const imp of this.imports) {
                 let moduleVariableName: string;
                 if (imp.variables && imp.variables.every((x) => x.usages == 0))
@@ -198,11 +183,19 @@ if not __exports then return end
                         } else {
                             fullModuleName = `${this.appName}/${imp.path}`;
                         }
+                        if (!hasImportsTable) {
+                            hasImportsTable = true;
+                            prehambule += "local __imports = {};\n";
+                        }
                         prehambule += `__imports.${moduleVariableName} = LibStub:GetLibrary("${fullModuleName}")\n`;
                     } else {
                         const extras = this.packageExtras.getExtras(imp.module);
                         let moduleName = extras.lua.name;
                         fullModuleName = `"${moduleName}"`;
+                        if (!hasImportsTable) {
+                            hasImportsTable = true;
+                            prehambule += "local __imports = {};\n";
+                        }
                         if (extras.lua?.isGlobal) {
                             prehambule += `__imports.${moduleVariableName} = ${moduleName}\n`;
                         } else {
