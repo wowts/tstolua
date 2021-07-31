@@ -113,25 +113,91 @@ local Test = __class(Base, {
     );
 });
 
-test.skip("module import", () => {
+// XXX need to mock PackageExtras for this test
+test.skip("imports external @wowts module", () => {
+    expect(
+        testTransform(
+            `import aceEvent from "@wowts/ace_event-3.0";
+let a = aceEvent;
+`
+        )
+    ).toBe(
+        `local __imports = {}
+__imports.aceEvent = LibStub:GetLibrary("AceEvent-3.0", true)
+local aceEvent = __imports.aceEvent
+local a = aceEvent
+`
+    );
+});
+
+test("imports local module", () => {
     expect(
         testTransform(
             `import { OvaleScripts } from "./OvaleScripts";
 let a = OvaleScripts;
-import Test from 'Test';
-import AceAddon from "ace_addon-3.0";
+`
+        )
+    ).toBe(
+        `local __imports = {}
+__imports.__OvaleScripts = LibStub:GetLibrary("test/OvaleScripts")
+__imports.OvaleScripts = __imports.__OvaleScripts.OvaleScripts
+local OvaleScripts = __imports.OvaleScripts
+local a = OvaleScripts
+`
+    );
+});
+
+test("imports unused symbol", () => {
+    expect(
+        testTransform(
+            `import { OvaleScripts } from "./OvaleScripts";
 export const bla = 3;
 `
         )
     ).toBe(
         `local __exports = LibStub:NewLibrary("test/source", 1)
 if not __exports then return end
-local __OvaleScripts = LibStub:GetLibrary("test/testfiles/test5/OvaleScripts")
-local OvaleScripts = __OvaleScripts.OvaleScripts
-local Test = LibStub:GetLibrary("Test", true)
-local AceAddon = LibStub:GetLibrary("AceAddon-3.0", true)
-local a = OvaleScripts
 __exports.bla = 3
+`
+    );
+});
+
+test("new object of imported class", () => {
+    expect(
+        testTransform(
+            `import { OvaleScripts } from "./OvaleScripts";
+let a = new OvaleScripts()
+`
+        )
+    ).toBe(
+        `local __imports = {}
+__imports.__OvaleScripts = LibStub:GetLibrary("test/OvaleScripts")
+__imports.OvaleScripts = __imports.__OvaleScripts.OvaleScripts
+local OvaleScripts = __imports.OvaleScripts
+local a = __imports.OvaleScripts()
+`
+    );
+});
+
+test("import additions come before local aliasing", () => {
+    expect(
+        testTransform(
+            `import { A } from "./A";
+let a = A;
+import { B } from "./B";
+let b = B;
+`
+        )
+    ).toBe(
+        `local __imports = {}
+__imports.__A = LibStub:GetLibrary("test/A")
+__imports.A = __imports.__A.A
+__imports.__B = LibStub:GetLibrary("test/B")
+__imports.B = __imports.__B.B
+local A = __imports.A
+local B = __imports.B
+local a = A
+local b = B
 `
     );
 });
