@@ -185,7 +185,7 @@ if not __exports then return end
                         }
                         if (!hasImportsTable) {
                             hasImportsTable = true;
-                            prehambule += "local __imports = {};\n";
+                            prehambule += "local __imports = {}\n";
                         }
                         prehambule += `__imports.${moduleVariableName} = LibStub:GetLibrary("${fullModuleName}")\n`;
                     } else {
