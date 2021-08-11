@@ -47,7 +47,11 @@ test("table iteration", () => {
 }`
         )
     ).toBe(
-        `for k = #test, 1, -1 do
+        `do
+    local k = #test
+    while k >= 1 do
+        k = k + -1
+    end
 end
 `
     );
@@ -707,8 +711,12 @@ test("increment in a loop", () => {
         )
     ).toBe(
         `local a = 0
-for i = 0, 5, 1 do
-    a = a + 1
+do
+    local i = 0
+    while i < 5 do
+        a = a + 1
+        i = i + 1
+    end
 end
 `
     );
@@ -774,6 +782,152 @@ if (toto) {
 if toto then
     local version = "z"
     test(version)
+end
+`);
+});
+
+test("simple for loop that increments", () => {
+    expect(
+        testTransform(`let a = 0;
+for (let i = 1; i < 5; i += 1) {
+    a += 1;
+}
+`)
+    ).toBe(`local a = 0
+do
+    local i = 1
+    while i < 5 do
+        a = a + 1
+        i = i + 1
+    end
+end
+`);
+});
+
+test("simple for loop that increments with no body", () => {
+    expect(
+        testTransform(`for (let i = 1; i < 5; i += 1) {}`)
+    ).toBe(`do
+    local i = 1
+    while i < 5 do
+        i = i + 1
+    end
+end
+`);
+});
+
+test("simple for loop that decrements", () => {
+    expect(
+        testTransform(`let a = 0;
+for (let i = 5; i > 1; i -= 1) {
+    a += 1;
+}
+`)
+    ).toBe(`local a = 0
+do
+    local i = 5
+    while i > 1 do
+        a = a + 1
+        i = i - 1
+    end
+end
+`);
+});
+
+test("for loop with control variable outside scope", () => {
+    expect(
+        testTransform(`let a = 0;
+let b = 0;
+for (a = 10; a < 20; a += 1) {
+    b += 10;
+}
+`)
+    ).toBe(`local a = 0
+local b = 0
+a = 10
+while a < 20 do
+    b = b + 10
+    a = a + 1
+end
+`);
+});
+
+test("for loop with function call initializer, condition, and finalizer", () => {
+    expect(
+        testTransform(`let a = 0;
+for (init(); condition(); final()) {
+    a += 1;
+}
+`)
+    ).toBe(`local a = 0
+init()
+while condition() do
+    a = a + 1
+    final()
+end
+`);
+});
+
+test("for loop without initializer", () => {
+    expect(
+        testTransform(`let a = 0;
+for (; condition(); final()) {
+    a += 1;
+}
+`)
+    ).toBe(`local a = 0
+while condition() do
+    a = a + 1
+    final()
+end
+`);
+});
+
+test("for loop without condition", () => {
+    expect(
+        testTransform(`let a = 0;
+for (let i = 1; ; i++) {
+    a += 1;
+}
+`)
+    ).toBe(`local a = 0
+do
+    local i = 1
+    while true do
+        a = a + 1
+        i = i + 1
+    end
+end
+`);
+});
+
+test("for loop without finalizer", () => {
+    expect(
+        testTransform(`let a = 0;
+for (let i = 1; condition(); ) {
+    a += 1;
+}
+`)
+    ).toBe(`local a = 0
+do
+    local i = 1
+    while condition() do
+        a = a + 1
+    end
+end
+`);
+});
+
+test("forever loop", () => {
+    expect(
+        testTransform(`let a = 0;
+for (;;) {
+    a += 1;
+}
+`)
+    ).toBe(`local a = 0
+while true do
+    a = a + 1
 end
 `);
 });
