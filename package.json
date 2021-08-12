@@ -1,6 +1,6 @@
 {
     "name": "@wowts/tstolua",
-    "version": "1.13.5",
+    "version": "1.13.6",
     "main": "./dist/index.js",
     "bin": {
         "tstolua": "./bin/tstolua"
