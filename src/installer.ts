@@ -364,7 +364,7 @@ ${sortedSources
 ## Author: ${this.mainPackage.author}
 ## Version: ${this.mainPackage.version}
 ## OptionalDeps: LibStub, ${Array.from(this.packages.extra.values())
-                .map((x) => x.name)
+                .map((x) => x.lua?.name)
                 .join(", ")}
 ${lua.savedVariables ? `## SavedVariables: ${lua.savedVariables}` : ""}
 
