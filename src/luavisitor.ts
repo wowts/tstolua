@@ -794,84 +794,177 @@ if not __exports then return end
                 break;
             case ts.SyntaxKind.ForStatement:
                 const forStatement = <ts.ForStatement>node;
-                let depth = tabs;
-                if (forStatement.initializer) {
-                    let isLocalVariableDeclaration =
-                        forStatement.initializer.kind ==
-                        ts.SyntaxKind.VariableDeclarationList &&
-                        !this.hasExportModifier(forStatement.initializer);
-                    if (isLocalVariableDeclaration) {
-                        this.writeTabs(depth);
-                        this.result += "do\n";
-                        depth += 1;
-                        this.writeTabs(depth);
-                        this.result += "local ";
-                    } else {
-                        this.writeTabs(depth);
-					}
-                    this.traverse(forStatement.initializer, depth, node);
-                    this.result += "\n";
-                }
-                this.writeTabs(depth);
-                if (forStatement.condition) {
-                    this.result += "while ";
-                    this.traverse(forStatement.condition, depth, node);
-                    this.result += " do\n";
-                } else {
-                    this.result += "while true do\n";
-                }
-                depth += 1;
-                this.traverse(forStatement.statement, depth, node);
-                if (forStatement.incrementor) {
+                const initializer = forStatement.initializer;
+                const condition = forStatement.condition;
+                const incrementor = forStatement.incrementor;
+
+                // Determine if the for loop is a simple numeric loop.
+                const isSimpleDeclaration =
+                    initializer &&
+                    initializer.kind == ts.SyntaxKind.VariableDeclarationList;
+                let limitExpression: ts.Expression | undefined;
+                let stepExpression: ts.Expression | undefined;
+                let step: number | undefined;
+                let hasNegativeStep = false;
+                if (
+                    isSimpleDeclaration &&
+                    condition &&
+                    incrementor &&
+                    condition.kind == ts.SyntaxKind.BinaryExpression
+                ) {
+                    const expression = <ts.BinaryExpression>condition;
+                    const op = expression.operatorToken.kind;
+                    if (op == ts.SyntaxKind.LessThanEqualsToken) {
+                        hasNegativeStep = false;
+                        limitExpression = expression.right;
+                    } else if (op == ts.SyntaxKind.GreaterThanEqualsToken) {
+                        hasNegativeStep = true;
+                        limitExpression = expression.right;
+                    }
                     if (
-                        forStatement.incrementor.kind ==
-                        ts.SyntaxKind.PostfixUnaryExpression
+                        incrementor.kind == ts.SyntaxKind.PostfixUnaryExpression
                     ) {
-                        /* Postfix unary expressions probably shouldn't
-                         * be allowed at all, but is here for convenience
-                         * when writing idiomatic TypeScript for loops.
-                         */
                         const expression = <ts.PostfixUnaryExpression>(
-                            forStatement.incrementor
+                            incrementor
                         );
-                        switch (expression.operator) {
-                            case ts.SyntaxKind.MinusMinusToken:
-                            case ts.SyntaxKind.PlusPlusToken:
-                                this.writeTabs(depth);
-                                /* TODO: there should be a check that the operand
-                                 * is a "simple" LHS expression.
-                                 */
-                                this.traverse(expression.operand, depth, node);
-                                this.result += " = ";
-                                this.traverse(expression.operand, depth, node);
-                                if (
-                                    expression.operator ==
-                                    ts.SyntaxKind.MinusMinusToken
-                                ) {
-                                    this.result += " - 1\n";
-                                } else {
-                                    this.result += " + 1\n";
-                                }
-                                break;
-                            default:
-                                this.errors.push(
-                                    "for statement postfix incrementor must be -- or ++"
-                                );
-                                break;
+                        const op = expression.operator;
+                        if (
+                            hasNegativeStep &&
+                            op == ts.SyntaxKind.MinusMinusToken
+                        ) {
+                            step = -1;
+                        } else if (
+                            !hasNegativeStep &&
+                            op == ts.SyntaxKind.PlusPlusToken
+                        ) {
+                            step = 1;
                         }
-                    } else {
-                        this.writeTabs(depth);
-                        this.traverse(forStatement.incrementor, depth, node);
-                        this.result += "\n";
+                    } else if (
+                        incrementor.kind == ts.SyntaxKind.BinaryExpression
+                    ) {
+                        const expression = <ts.BinaryExpression>incrementor;
+                        const op = expression.operatorToken.kind;
+                        if (op == ts.SyntaxKind.MinusEqualsToken) {
+                            hasNegativeStep = true;
+                            stepExpression = expression.right;
+                        } else if (op == ts.SyntaxKind.PlusEqualsToken) {
+                            hasNegativeStep = false;
+                            stepExpression = expression.right;
+                        }
                     }
                 }
-                depth -= 1;
-                this.writeTabs(depth);
-                this.result += "end\n";
-                if (depth > tabs) {
+
+                if (
+                    initializer &&
+                    limitExpression &&
+                    (stepExpression || step)
+                ) {
+                    // numeric for loop
+                    this.writeTabs(tabs);
+                    this.result += "for ";
+                    this.traverse(initializer, tabs, node);
+                    this.result += ", ";
+                    this.traverse(limitExpression, tabs, node);
+                    if (step == 1) {
+                        // use default Lua step of 1
+                    } else if (step == -1) {
+                        this.result += ", -1";
+                    } else if (stepExpression) {
+                        this.result += ", ";
+                        if (hasNegativeStep) {
+                            this.result += "-";
+                        }
+                        this.traverse(stepExpression, tabs, node);
+                    }
+                    this.result += " do\n";
+                    this.traverse(forStatement.statement, tabs + 1, node);
+                    this.writeTabs(tabs);
+                    this.result += "end\n";
+                } else {
+                    // while loop
+                    let depth = tabs;
+                    if (initializer) {
+                        if (isSimpleDeclaration) {
+                            this.writeTabs(depth);
+                            this.result += "do\n";
+                            depth += 1;
+                            this.writeTabs(depth);
+                            this.result += "local ";
+                        } else {
+                            this.writeTabs(depth);
+                        }
+                        this.traverse(initializer, depth, node);
+                        this.result += "\n";
+                    }
+                    this.writeTabs(depth);
+                    if (condition) {
+                        this.result += "while ";
+                        this.traverse(condition, depth, node);
+                        this.result += " do\n";
+                    } else {
+                        this.result += "while true do\n";
+                    }
+                    depth += 1;
+                    this.traverse(forStatement.statement, depth, node);
+                    if (incrementor) {
+                        if (
+                            incrementor.kind ==
+                            ts.SyntaxKind.PostfixUnaryExpression
+                        ) {
+                            /* Postfix unary expressions probably shouldn't
+                             * be allowed at all, but is here for convenience
+                             * when writing idiomatic TypeScript for loops.
+                             */
+                            const expression = <ts.PostfixUnaryExpression>(
+                                incrementor
+                            );
+                            switch (expression.operator) {
+                                case ts.SyntaxKind.MinusMinusToken:
+                                case ts.SyntaxKind.PlusPlusToken:
+                                    this.writeTabs(depth);
+                                    /* TODO: there should be a check that the operand
+                                     * is a "simple" LHS expression.
+                                     */
+                                    this.traverse(
+                                        expression.operand,
+                                        depth,
+                                        node
+                                    );
+                                    this.result += " = ";
+                                    this.traverse(
+                                        expression.operand,
+                                        depth,
+                                        node
+                                    );
+                                    if (
+                                        expression.operator ==
+                                        ts.SyntaxKind.MinusMinusToken
+                                    ) {
+                                        this.result += " - 1\n";
+                                    } else {
+                                        this.result += " + 1\n";
+                                    }
+                                    break;
+                                default:
+                                    this.errors.push(
+                                        "for statement postfix incrementor must be -- or ++"
+                                    );
+                                    break;
+                            }
+                        } else {
+                            this.writeTabs(depth);
+                            this.traverse(incrementor, depth, node);
+                            this.result += "\n";
+                        }
+                    }
                     depth -= 1;
                     this.writeTabs(depth);
                     this.result += "end\n";
+                    if (depth > tabs) {
+                        depth -= 1;
+                        this.writeTabs(depth);
+                        this.result += "end\n";
+                    }
                 }
                 break;
             case ts.SyntaxKind.ForOfStatement:
