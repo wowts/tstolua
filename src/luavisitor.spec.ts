@@ -1,4 +1,5 @@
 import { test, expect } from "@jest/globals";
+import { PackageExtras } from "./package-extra";
 import { testTransform } from "./testhelpers/compiler";
 
 test("simple assignation", () => {
@@ -113,14 +114,16 @@ local Test = __class(Base, {
     );
 });
 
-// XXX need to mock PackageExtras for this test
-test.skip("imports external @wowts module", () => {
+test("imports external @wowts module", () => {
+    const packageExtras = new PackageExtras();
+    packageExtras.extra.set("Test", { version: "1", dependencies: {}, lua: {}, name: "test", referencedBy: {}, references: [] })
+    packageExtras.extra.set("@wowts/ace_event-3.0", { version: "1", dependencies: {}, lua: { name: "AceEvent-3.0"}, name: "test", referencedBy: {}, references: []})
     expect(
         testTransform(
             `import aceEvent from "@wowts/ace_event-3.0";
 let a = aceEvent;
 `
-        )
+        , false, packageExtras)
     ).toBe(
         `local __imports = {}
 __imports.aceEvent = LibStub:GetLibrary("AceEvent-3.0", true)
@@ -148,11 +151,12 @@ local a = OvaleScripts
 });
 
 test("imports unused symbol", () => {
+    const packageExtras = new PackageExtras();
     expect(
         testTransform(
             `import { OvaleScripts } from "./OvaleScripts";
 export const bla = 3;
-`
+`, undefined, packageExtras
         )
     ).toBe(
         `local __exports = LibStub:NewLibrary("test/source", 1)

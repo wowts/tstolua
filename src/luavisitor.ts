@@ -194,7 +194,7 @@ if not __exports then return end
                         fullModuleName = `"${moduleName}"`;
                         if (!hasImportsTable) {
                             hasImportsTable = true;
-                            prehambule += "local __imports = {};\n";
+                            prehambule += "local __imports = {}\n";
                         }
                         if (extras.lua?.isGlobal) {
                             prehambule += `__imports.${moduleVariableName} = ${moduleName}\n`;

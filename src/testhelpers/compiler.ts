@@ -45,7 +45,7 @@ export class TestCompilerHost implements ts.CompilerHost {
     }
 }
 
-export function testTransform(source: string, ignoreError: boolean = false) {
+export function testTransform(source: string, ignoreError: boolean = false, packageExtras?: PackageExtras) {
     const fileName = "source.ts";
 
     const sourceFile = ts.createSourceFile(
@@ -63,6 +63,7 @@ export function testTransform(source: string, ignoreError: boolean = false) {
             emitDecoratorMetadata: false,
             strict: true,
             lib: ["ES2015"],
+
         },
         host
     );
@@ -83,7 +84,7 @@ export function testTransform(source: string, ignoreError: boolean = false) {
         1,
         "test",
         "",
-        new PackageExtras()
+        packageExtras ?? new PackageExtras()
     );
     visitor.traverse(sourceFile, 0, undefined);
     if (!ignoreError) expect(visitor.errors).toEqual([]);
