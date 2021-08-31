@@ -1,7 +1,8 @@
-import { option } from "commander";
+import { program } from "commander";
 import { compile } from "./compiler";
 
-const program = option("-j, --js", "Emit javascript")
+program
+    .option("-j, --js", "Emit javascript")
     .option("-w, --watch", "Watch mode")
     .option(
         "-p, --project [tsconfig.json]",

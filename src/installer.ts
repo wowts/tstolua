@@ -17,7 +17,7 @@ import {
     PackageExtras,
     PackageJson,
 } from "./package-extra";
-import { createClient, WebdavClient } from "webdav";
+import { createClient, FileStat, WebDAVClient } from "webdav";
 import degit from "degit";
 import child_process from "child_process";
 
@@ -47,9 +47,8 @@ export class Installer {
         while ((result = regex.exec(text)) !== null) {
             const referencePackageName = result[1];
             if (referencePackageName === packageInfos.lua.name) continue;
-            const referencedPackage = this.packages.packageByLuaName.get(
-                referencePackageName
-            );
+            const referencedPackage =
+                this.packages.packageByLuaName.get(referencePackageName);
             if (referencedPackage) {
                 if (
                     !referencedPackage.lua.parent &&
@@ -73,13 +72,15 @@ export class Installer {
     private async downloadSvnDirectory(
         moduleDir: string,
         path: string,
-        client: WebdavClient,
+        client: WebDAVClient,
         packageInfo: PackageJson
     ) {
         if (!existsSync(join(moduleDir, path)))
             mkdirSync(join(moduleDir, path));
         try {
-            const directoryItems = await client.getDirectoryContents(path);
+            const directoryItems = (await client.getDirectoryContents(
+                path
+            )) as FileStat[];
             for (const directoryItem of directoryItems) {
                 if (directoryItem.type === "directory") {
                     await this.downloadSvnDirectory(
@@ -94,9 +95,9 @@ export class Installer {
                         directoryItem.basename.endsWith(".xml")
                     ) {
                         try {
-                            const buffer = await client.getFileContents(
+                            const buffer = (await client.getFileContents(
                                 directoryItem.filename
-                            );
+                            )) as Buffer;
                             const outPath = join(
                                 moduleDir,
                                 directoryItem.filename
