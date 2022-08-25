@@ -16,7 +16,7 @@
         "release": "yarn build && standard-version"
     },
     "devDependencies": {
-        "@types/node": "^16.6.0",
+        "@types/node": "^18.7.13",
         "@typescript-eslint/eslint-plugin": "^4.29.1",
         "@typescript-eslint/parser": "^4.26.1",
         "eslint": "^7.30.0",
